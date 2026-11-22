@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use Hyperf\Server\Event;
 use Hyperf\Server\Server;
+
+use function Hyperf\Support\env;
+
 use Swoole\Constant;
 
 return [

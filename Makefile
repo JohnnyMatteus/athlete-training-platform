@@ -14,8 +14,8 @@ env: ## Cria .env a partir de .env.example
 dev-keys: ## Gera o par de chaves JWT de desenvolvimento (token: infra/scripts/dev-jwt.sh token)
 	./infra/scripts/dev-jwt.sh keys
 
-up: env dev-keys ## Sobe Postgres+Timescale, RabbitMQ, MinIO e tusd
-	$(DC) up -d --wait postgres rabbitmq minio minio-init tusd
+up: env dev-keys ## Sobe Postgres+Timescale, RabbitMQ, LocalStack S3 e tusd
+	$(DC) up -d --wait postgres rabbitmq localstack tusd
 
 down: ## Para a infraestrutura (mantém volumes)
 	$(DC) down

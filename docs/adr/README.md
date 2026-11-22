@@ -13,7 +13,7 @@ Decisões iniciais do [design doc](../design-doc.md) (seção 13), no formato de
 | [0007](0007-hyperf-api-planejamento-go-ingestao-metricas.md) | A-07 | Hyperf para API e Planejamento; Go para ingestão e métricas | sim |
 | [0008](0008-dados-de-saude-sensiveis-lgpd.md) | A-08 | Dados de saúde tratados como sensíveis (LGPD): consentimento, criptografia, retenção curta de arquivos | sim (dados sintéticos, retenção) |
 | [0009](0009-contratos-versionados-e-um-banco-por-contexto.md) | (implementação) | Contratos versionados em `contracts/` e um banco por contexto | sim |
-| [0010](0010-tusd-separado-com-backend-s3.md) | (implementação) | Servidor tus separado (tusd) com backend S3/MinIO | sim |
+| [0010](0010-tusd-separado-com-backend-s3.md) | (implementação) | Servidor tus separado (tusd) com backend S3 (servidor local trocado pelo ADR 0035) | sim |
 | [0011](0011-autenticacao-jwt-do-atleta.md) | (implementação) | Autenticação do atleta com JWT (RS256) validado pela API; provedor fora do M1 | sim |
 | [0012](0012-banco-metricas-dono-de-carga-diaria.md) | (implementação) | Banco `metricas` é dono de `carga_diaria` (amostras: ver 0015) | não (M2) |
 | [0013](0013-servico-de-planejamento-hyperf.md) | (implementação) | Serviço de Planejamento em Hyperf, banco `planejamento`, hospedando o vínculo atleta-treinador | não (M4) |
@@ -34,5 +34,6 @@ Decisões iniciais do [design doc](../design-doc.md) (seção 13), no formato de
 | [0032](0032-app-leitura-incremental-de-saude.md) | (implementação) | App: leitura incremental do HealthKit e Health Connect com âncora e consentimento | não (M3) |
 | [0033](0033-app-upload-resumivel-e-hash-incremental.md) | (implementação) | App: upload tus resumível, hash incremental, retomada do lote | não (M3) |
 | [0034](0034-app-janela-deslizante-e-traducao-de-alvos.md) | (implementação) | Plugin WorkoutKit: janela deslizante no plugin, tradução de alvos no app | não (M5) |
+| [0035](0035-localstack-no-s3-local.md) | (implementação) | LocalStack no S3 local; corrige a chave do objeto lida do hook do tusd | sim |
 
 Onde o design doc não registra alternativas, o ADR diz isso explicitamente em vez de inventar; o autor completa antes de aceitar.

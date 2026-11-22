@@ -16,7 +16,7 @@ final class TusdHookTest extends TestCase
             'Type' => 'post-finish',
             'Event' => [
                 'Upload' => [
-                    'ID' => 'abc',
+                    'ID' => 'abc+multipart-id',
                     'Size' => 42,
                     'MetaData' => ['import_id' => 'x-1'],
                     'Storage' => ['Type' => 's3store', 'Bucket' => 'imports', 'Key' => 'abc'],
@@ -31,6 +31,23 @@ final class TusdHookTest extends TestCase
         self::assertSame('abc', $hook->uploadId);
         self::assertSame('imports', $hook->bucket);
         self::assertSame('tok.en.sig', $hook->bearerToken);
+    }
+
+    public function testObjectKeyComesFromStorageKeyNotFromTheMultipartUploadId(): void
+    {
+        $hook = TusdHook::fromArray([
+            'Type' => 'post-finish',
+            'Event' => ['Upload' => ['ID' => 'obj+mp', 'Storage' => ['Bucket' => 'uploads', 'Key' => 'obj']]],
+        ]);
+
+        self::assertSame('obj', $hook->uploadId);
+    }
+
+    public function testFallsBackToIdWithoutStorageKey(): void
+    {
+        $hook = TusdHook::fromArray(['Type' => 'post-finish', 'Event' => ['Upload' => ['ID' => 'plain']]]);
+
+        self::assertSame('plain', $hook->uploadId);
     }
 
     public function testMissingOptionalFieldsAreNull(): void

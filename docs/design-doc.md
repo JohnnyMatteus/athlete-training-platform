@@ -80,7 +80,7 @@ flowchart LR
     COACH["Coach IA (LangGraph TS)<br/>ferramentas via MCP"]
     MQ[["RabbitMQ"]]
     PG[("PostgreSQL + TimescaleDB")]
-    S3[("MinIO / S3")]
+    S3[("S3 (LocalStack local)")]
   end
 
   UI --> API
@@ -150,18 +150,18 @@ Regras da ACL:
 sequenceDiagram
   participant App
   participant API as API (Hyperf)
-  participant MinIO
+  participant S3 as S3 (LocalStack)
   participant MQ as RabbitMQ
   participant W as Worker Go
   participant PG as Postgres/Timescale
 
   App->>API: POST /imports (metadados, sha256)
   API-->>App: upload_url (tus), import_id
-  App->>MinIO: upload resumível em partes
-  MinIO->>API: upload concluído (hook)
+  App->>S3: upload resumível em partes
+  S3->>API: upload concluído (hook)
   API->>MQ: ImportacaoRecebida{import_id}
   MQ->>W: consome
-  W->>MinIO: lê zip em streaming
+  W->>S3: lê zip em streaming
   W->>W: decodifica export.xml token a token (encoding/xml)
   W->>PG: COPY em lotes (amostras), upsert de atividades
   W->>MQ: TreinoImportado (1 por atividade nova)
@@ -342,7 +342,7 @@ export interface WorkoutKitPlugin {
 | --- | --- |
 | Unidade (domínio) | Fórmulas de métricas com valores de referência; regras do validador |
 | Contrato (ACL) | Cada tradutor com arquivos reais anonimizados (export.xml reduzido, .fit de bike, .gpx de corrida, natação em piscina) |
-| Integração | Testcontainers (Postgres/Timescale, RabbitMQ, MinIO) |
+| Integração | Testcontainers (Postgres/Timescale, RabbitMQ); CI com LocalStack pelo compose |
 | Carga | Export sintético de 1 GB: memória constante e tempo dentro do SLO |
 | Propriedades | Reimportação idempotente; recálculo de CTL após correção dá o mesmo resultado que cálculo do zero |
 | Evals do Coach IA | 30 cenários (semanas perdidas, cansaço, meta irreal, relato de dor): % de propostas aceitas pelo validador, 0 conselhos médicos, recusa correta quando há dor |

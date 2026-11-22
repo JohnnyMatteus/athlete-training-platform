@@ -7,7 +7,7 @@ namespace App\Infrastructure\Persistence;
 use App\Application\Port\ObjectChecksum;
 use Aws\S3\S3Client;
 
-/** Calcula o sha256 do objeto no MinIO/S3 em streaming (memória constante, mesmo para 1 GB). */
+/** Calcula o sha256 do objeto no S3 em streaming (memória constante, mesmo para 1 GB). */
 final readonly class S3ObjectChecksum implements ObjectChecksum
 {
     public function __construct(private S3Client $s3)

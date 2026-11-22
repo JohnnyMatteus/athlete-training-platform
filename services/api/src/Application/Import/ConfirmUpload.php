@@ -23,12 +23,21 @@ final readonly class ConfirmUpload
         private EventOutbox $outbox,
         private Transaction $transaction,
         private ClockInterface $clock,
+        private string $allowedBucket,
     ) {
     }
 
-    /** @param string $uploadId ID do upload no tusd; é também a chave do objeto no bucket (object_key do evento) */
+    /**
+     * @param string $uploadId chave do objeto no bucket (Storage.Key do tusd, e não o Upload.ID, que leva o sufixo
+     *                         do multipart); é o object_key do evento
+     *
+     * @throws UploadRejected quando o bucket informado não é o configurado; nada é lido nem alterado
+     */
     public function __invoke(ImportId $id, string $bucket, string $uploadId): void
     {
+        if ($bucket !== $this->allowedBucket) {
+            throw new UploadRejected('bucket não permitido');
+        }
         $batch = $this->batches->find($id) ?? throw new NotFound('Importação não encontrada');
         if ($batch->status() !== ImportStatus::AguardandoUpload) {
             return; // hook reenviado pelo tusd: já tratado

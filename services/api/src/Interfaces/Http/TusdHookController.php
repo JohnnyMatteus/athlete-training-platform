@@ -18,7 +18,7 @@ use Hyperf\HttpServer\Contract\ResponseInterface;
 use Psr\Http\Message\ResponseInterface as Psr7Response;
 use Throwable;
 
-/** Endpoint dos hooks HTTP do tusd (rede interna; segredo compartilhado opcional em ?token=). */
+/** Endpoint dos hooks HTTP do tusd (rede interna). Exige o segredo compartilhado em ?token=; sem segredo configurado, recusa tudo. */
 final class TusdHookController
 {
     public function __construct(
@@ -28,13 +28,14 @@ final class TusdHookController
         private readonly ConfirmUpload $confirmUpload,
         private readonly Authenticator $authenticator,
         private readonly ImportTraceStore $traces,
-        private readonly string $hookSecret,
+        private readonly HookSecret $hookSecret,
     ) {
     }
 
     public function handle(): Psr7Response
     {
-        if ($this->hookSecret !== '' && !hash_equals($this->hookSecret, (string) $this->request->query('token', ''))) {
+        $token = $this->request->query('token', '');
+        if (!$this->hookSecret->accepts(is_string($token) ? $token : '')) {
             return $this->response->json(['error' => 'forbidden'])->withStatus(403);
         }
 
@@ -44,8 +45,14 @@ final class TusdHookController
         return match ($hook->type) {
             'pre-create' => $this->preCreate($hook),
             'post-finish' => $this->postFinish($hook),
-            default => $this->response->json([]),
+            default => $this->accepted(),
         };
+    }
+
+    /** O tusd exige um objeto JSON: um array vazio do PHP viraria `[]` e ele recusa a resposta. */
+    private function accepted(): Psr7Response
+    {
+        return $this->response->json(['RejectUpload' => false]);
     }
 
     private function preCreate(TusdHook $hook): Psr7Response
@@ -66,7 +73,7 @@ final class TusdHookController
             ]);
         }
 
-        return $this->response->json([]);
+        return $this->accepted();
     }
 
     private function postFinish(TusdHook $hook): Psr7Response
@@ -80,6 +87,9 @@ final class TusdHookController
         Context::set(Tracing::CONTEXT_KEY, $span->traceparent());
         try {
             ($this->confirmUpload)($id, $hook->bucket, $hook->uploadId);
+        } catch (UploadRejected) {
+            // Bucket fora do configurado: recusa sem ler o objeto e sem alterar o lote.
+            return $this->response->json(['error' => 'forbidden'])->withStatus(403);
         } catch (Throwable $e) {
             $span->fail($e);
             throw $e;
@@ -87,6 +97,6 @@ final class TusdHookController
             $span->end();
         }
 
-        return $this->response->json([]);
+        return $this->accepted();
     }
 }

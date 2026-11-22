@@ -38,7 +38,9 @@ final readonly class TusdHook
         $token = is_string($auth) && preg_match('/^Bearer\s+(\S+)$/i', $auth, $m) === 1 ? $m[1] : null;
 
         $bucket = is_array($upload['Storage'] ?? null) ? ($upload['Storage']['Bucket'] ?? null) : null;
-        $id = $upload['ID'] ?? null;
+        // No backend S3 o ID do tusd é "<chave>+<id do multipart>"; a chave real do objeto vem de Storage.Key.
+        $key = is_array($upload['Storage'] ?? null) ? ($upload['Storage']['Key'] ?? null) : null;
+        $id = is_string($key) ? $key : ($upload['ID'] ?? null);
 
         return new self(
             $type,

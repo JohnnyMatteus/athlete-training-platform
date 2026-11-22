@@ -14,7 +14,7 @@ Worker de ingestão em Go (M1) e face HTTP do contexto Atividades (ADR 0015). De
 | Variável | Uso |
 | --- | --- |
 | `INGEST_DATABASE_URL`, `RABBITMQ_URL` | Banco `atividades` e broker |
-| `MINIO_ENDPOINT`, `MINIO_USE_SSL`, `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD` | Armazenamento dos arquivos |
+| `S3_HOST` (host:porta, sem esquema), `S3_USE_SSL`, `S3_REGION` (opcional), `S3_ACCESS_KEY`, `S3_SECRET_KEY` | Armazenamento dos arquivos (S3; LocalStack no compose) |
 | `INGEST_MAX_ATTEMPTS`, `INGEST_COPY_BATCH` | Tentativas e lote do `COPY` (padrões 3 e 5000) |
 | `INTERNAL_API_TOKEN` | Token de serviço do endpoint interno (obrigatório) |
 | `JWT_PUBLIC_KEY_FILE`, `JWT_ISSUER`, `JWT_AUDIENCE` | Validação do token do atleta |

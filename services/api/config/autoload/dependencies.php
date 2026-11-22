@@ -21,8 +21,12 @@ use App\Infrastructure\Persistence\HyperfTransaction;
 use App\Infrastructure\Persistence\PgImportBatchRepository;
 use App\Infrastructure\Persistence\PgImportTraceStore;
 use App\Infrastructure\Persistence\S3ObjectChecksum;
+use App\Interfaces\Http\HookSecret;
 use App\Interfaces\Http\TusdHookController;
 use Aws\S3\S3Client;
+
+use function Hyperf\Support\env;
+
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
@@ -61,7 +65,7 @@ return [
             'region' => env('S3_REGION', 'us-east-1'),
             'endpoint' => env('S3_ENDPOINT'),
             'use_path_style_endpoint' => true,
-            'credentials' => ['key' => env('S3_KEY', env('MINIO_ROOT_USER')), 'secret' => env('S3_SECRET', env('MINIO_ROOT_PASSWORD'))],
+            'credentials' => ['key' => env('S3_KEY', env('S3_ACCESS_KEY')), 'secret' => env('S3_SECRET', env('S3_SECRET_KEY'))],
         ]),
     ),
     CreateImport::class => static fn (ContainerInterface $c) => new CreateImport(
@@ -71,6 +75,14 @@ return [
         (int) env('IMPORT_MAX_BYTES', 2 * 1024 ** 3),
         new DateInterval((string) env('IMPORT_UPLOAD_TTL', 'PT24H')),
     ),
+    ConfirmUpload::class => static fn (ContainerInterface $c) => new ConfirmUpload(
+        $c->get(ImportBatchRepository::class),
+        $c->get(ObjectChecksum::class),
+        $c->get(EventOutbox::class),
+        $c->get(Transaction::class),
+        $c->get(ClockInterface::class),
+        (string) env('UPLOADS_BUCKET', 'uploads'),
+    ),
     TusdHookController::class => static fn (ContainerInterface $c) => new TusdHookController(
         $c->get(Hyperf\HttpServer\Contract\RequestInterface::class),
         $c->get(Hyperf\HttpServer\Contract\ResponseInterface::class),
@@ -78,6 +90,6 @@ return [
         $c->get(ConfirmUpload::class),
         $c->get(Authenticator::class),
         $c->get(ImportTraceStore::class),
-        (string) env('TUSD_HOOK_SECRET', ''),
+        new HookSecret((string) env('TUSD_HOOK_SECRET', '')),
     ),
 ];

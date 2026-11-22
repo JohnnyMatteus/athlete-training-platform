@@ -44,13 +44,16 @@ final class UploadFlowTest extends TestCase
         $this->id = new ImportId($result['import_id']);
     }
 
-    private function confirm(string $actualSha): void
+    private function confirm(string $actualSha, string $bucket = 'uploads', ?FakeChecksum $checksum = null): void
     {
-        (new ConfirmUpload($this->batches, new FakeChecksum($actualSha), $this->outbox, new PassThroughTransaction(), $this->clock))(
-            $this->id,
+        (new ConfirmUpload(
+            $this->batches,
+            $checksum ?? new FakeChecksum($actualSha),
+            $this->outbox,
+            new PassThroughTransaction(),
+            $this->clock,
             'uploads',
-            'tus-upload-id',
-        );
+        ))($this->id, $bucket, 'tus-upload-id');
     }
 
     public function testMatchingChecksumMarksReceivedAndPublishesEvent(): void
@@ -62,6 +65,21 @@ final class UploadFlowTest extends TestCase
         self::assertInstanceOf(ImportacaoRecebida::class, $this->outbox->events[0]);
         self::assertSame('tus-upload-id', $this->outbox->events[0]->data()['object_key']);
         self::assertSame('uploads', $this->outbox->events[0]->data()['bucket']);
+    }
+
+    public function testForeignBucketIsRejectedWithoutReadingTheObjectOrChangingTheBatch(): void
+    {
+        $checksum = new FakeChecksum(Samples::SHA);
+
+        try {
+            $this->confirm(Samples::SHA, 'bucket-alheio', $checksum);
+            self::fail('esperava UploadRejected');
+        } catch (UploadRejected) {
+        }
+
+        self::assertSame(0, $checksum->calls);
+        self::assertSame(ImportStatus::AguardandoUpload, $this->batches->find($this->id)->status());
+        self::assertCount(0, $this->outbox->events);
     }
 
     public function testChecksumMismatchFailsBatchAndPublishesOnlyFailure(): void

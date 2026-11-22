@@ -16,12 +16,12 @@ Quem treina triatlo acumula dados em vários lugares: o Apple Watch (app Saúde)
 flowchart LR
   APP[App / cliente tus] -->|POST /imports| API[API Hyperf]
   APP -->|upload resumível| TUSD[tusd]
-  TUSD --> MINIO[(MinIO / S3)]
+  TUSD --> S3LOCAL[(S3 / LocalStack)]
   TUSD -->|hooks HTTP| API
   API -->|outbox| MQ[[RabbitMQ]]
   API --> PGI[(Postgres: importacao)]
   MQ -->|ImportacaoRecebida| ING[Worker Go]
-  ING --> MINIO
+  ING --> S3LOCAL
   ING --> PGA[(Postgres + Timescale: atividades)]
   ING -->|TreinoImportado, ImportacaoConcluida/Falhou| MQ
   MQ -->|resultado| API
@@ -49,7 +49,7 @@ Seis contextos delimitados integrados por eventos ([ADR 0001](docs/adr/0001-cont
 Requisitos: Docker com Compose v2, make. Para os serviços: PHP 8.3 + Composer + Swoole, Go (versão do `go.mod`).
 
 ```bash
-make up        # Postgres + TimescaleDB, RabbitMQ, MinIO e tusd (cria .env e o par de chaves JWT de desenvolvimento)
+make up        # Postgres + TimescaleDB, RabbitMQ, LocalStack S3 e tusd (cria .env e o par de chaves JWT de desenvolvimento)
 make migrate   # aplica as migrações de todos os bancos
 docker compose --profile core --env-file .env up -d --build   # API, Planejamento, ingestão, métricas, workers e Jaeger
 TOKEN=$(infra/scripts/dev-jwt.sh token)                       # JWT de teste (atleta); papel: dev-jwt.sh token <uuid> treinador
@@ -60,7 +60,6 @@ make down      # para (make clean também remove os volumes)
 | Serviço | Endereço | Credenciais de desenvolvimento |
 | --- | --- | --- |
 | RabbitMQ (gestão) | http://localhost:15672 | `atp` / `dev-only-change-me` |
-| MinIO (console) | http://localhost:9001 | `atp-minio` / `dev-only-change-me` |
 | tusd | http://localhost:8080/files/ | |
 | Planejamento (API) | http://localhost:8120 | JWT de `dev-jwt.sh` |
 | Métricas (API) | http://localhost:8121 | JWT de `dev-jwt.sh` |
@@ -68,7 +67,7 @@ make down      # para (make clean também remove os volumes)
 | Jaeger (traces) | http://localhost:8123 | |
 | Postgres | `localhost:5432` (bancos `importacao`, `atividades`, `metricas`, `planejamento`) | `atp` / `dev-only-change-me` |
 
-Portas e senhas ficam em `.env` (ignorado pelo Git). Os serviços sobem no compose (profile `core`); o `tusd` chama o hook em `http://api:9501/hooks/tus`, encaminhando o `Authorization`. Arquivos de importação expiram em `UPLOADS_RETENTION_DAYS` (padrão 7) por regra de ciclo de vida do bucket ([ADR 0019](docs/adr/0019-retencao-de-arquivos-por-ciclo-de-vida-do-bucket.md)). O compose não foi exercitado de ponta a ponta neste repositório sem Docker local: só `docker compose config` e os testes unitários rodaram fora do CI.
+Portas e senhas ficam em `.env` (ignorado pelo Git). Os serviços sobem no compose (profile `core`); o `tusd` chama o hook em `http://api:9501/hooks/tus?token=$TUSD_HOOK_SECRET` (segredo obrigatório: a API recusa hook sem o token, com 403, e o `post-finish` só aceita o bucket `UPLOADS_BUCKET`), encaminhando o `Authorization`. A API (9501) e o tusd (8080) ficam publicados só em `127.0.0.1`; para enviar de outro dispositivo da rede local, publique-os por um proxy próprio. Arquivos de importação expiram em `UPLOADS_RETENTION_DAYS` (padrão 7) por regra de ciclo de vida do bucket ([ADR 0019](docs/adr/0019-retencao-de-arquivos-por-ciclo-de-vida-do-bucket.md)). O S3 local é o LocalStack (`localstack/localstack:4.4.0`, só a API em `http://127.0.0.1:4566`, sem console); a regra de expiração é criada por `infra/localstack/init-s3.sh`. **Limites:** o LocalStack community não persiste dados entre recriações do contêiner (os uploads somem ao recriar o serviço) e não é prova de conformidade com a AWS; o job `s3-localstack` do CI prova o upload pelo tusd até o bucket e a regra de expiração gravada, não a expiração efetiva de objetos. Fora do CI, o compose completo não foi exercitado neste repositório sem Docker local.
 
 ## Como testar
 
@@ -101,6 +100,7 @@ O CI (`.github/workflows/ci.yml`, workflow `CI`) roda um job por serviço, só q
 | [0009](docs/adr/0009-contratos-versionados-e-um-banco-por-contexto.md) | Contratos versionados e um banco por contexto |
 | [0010](docs/adr/0010-tusd-separado-com-backend-s3.md) | tusd separado com backend S3 |
 | [0013](docs/adr/0013-servico-de-planejamento-hyperf.md) a [0019](docs/adr/0019-retencao-de-arquivos-por-ciclo-de-vida-do-bucket.md) | Serviço de Planejamento, RBAC com vínculo consentido, amostras por HTTP interno, motor e validador, aderência, OpenTelemetry e retenção |
+| [0035](docs/adr/0035-localstack-no-s3-local.md) | LocalStack no S3 local (substitui o servidor local do ADR 0010 e a regra do ADR 0019 passa a ser aplicada por `infra/localstack/init-s3.sh`) |
 
 ## Trade-offs
 

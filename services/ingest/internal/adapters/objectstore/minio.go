@@ -1,4 +1,4 @@
-// Package objectstore lê arquivos de importação do MinIO/S3.
+// Package objectstore lê arquivos de importação de um S3 (LocalStack local ou AWS), pelo cliente minio-go.
 package objectstore
 
 import (
