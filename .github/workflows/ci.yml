@@ -249,10 +249,10 @@ jobs:
           set -o pipefail
           docker compose --profile core --profile tools --env-file .env.example run --rm migrate 2>&1 | tee "$RUNNER_TEMP/migrate.log"
 
-      - name: Subir API, tusd e worker de ingestão (--wait)
+      - name: Subir API, relay da outbox, consumidor de resultados, tusd e worker de ingestão (--wait)
         run: |
           set -o pipefail
-          docker compose --profile core --env-file .env.example up -d --build --wait --wait-timeout 900 api tusd ingest 2>&1 | tee "$RUNNER_TEMP/up-app.log"
+          docker compose --profile core --env-file .env.example up -d --build --wait --wait-timeout 900 api api-relay api-consumer tusd ingest 2>&1 | tee "$RUNNER_TEMP/up-app.log"
 
       - name: Upload multipart pelo tusd até o bucket e regra de expiração
         run: |
