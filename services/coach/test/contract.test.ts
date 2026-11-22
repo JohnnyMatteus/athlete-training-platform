@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -102,23 +101,12 @@ describe("coach ports against the published examples", () => {
   });
 });
 
-// Route the coach requires. Until it reaches main it is read from the planning branch object, if that is in the clone.
 const VALIDATION = "/planos/{plano_id}/ajustes/validacao";
-function ownerValidation(): any | undefined { // eslint-disable-line @typescript-eslint/no-explicit-any
-  if (planning.paths[VALIDATION]) return planning.paths[VALIDATION];
-  try {
-    const raw = execFileSync("git", ["show", "5107159:contracts/openapi/planejamento.yaml"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
-    return (parse(raw) as Doc).paths[VALIDATION];
-  } catch {
-    return undefined;
-  }
-}
 
 describe("coach ports against the owner contracts", () => {
   const owners: Array<[string, Doc]> = [["metricas", metrics], ["planejamento", planning]];
   it("every route in coach-ports.yaml exists in the owner contract with the same method", () => {
     for (const [path, methods] of Object.entries(ports.paths)) {
-      if (path === VALIDATION && !planning.paths[VALIDATION]) continue; // pending in the owner contract
       for (const method of Object.keys(methods)) {
         const found = owners.some(([, d]) => d.paths[path]?.[method]);
         expect(found, `${method.toUpperCase()} ${path}`).toBe(true);
@@ -138,11 +126,10 @@ describe("coach ports against the owner contracts", () => {
     expect(s.AdjustmentRequest.properties.origem.enum).toContain("coach");
   });
 
-  it("the no-effect validation route matches the owner's contract when the owner publishes it", () => {
-    const route = ownerValidation();
-    if (!route) return; // not on main yet: the adapter fails closed on 404 (next test)
-    expect(route.post.requestBody.content["application/json"].schema.$ref).toMatch(/AdjustmentRequest/);
-    expect(route.post.responses["200"].content["application/json"].schema.$ref).toMatch(/AdjustmentResult/);
+  it("the no-effect validation route is the owner's: same body, AdjustmentResult", () => {
+    const route = planning.paths[VALIDATION]?.post;
+    expect(route.requestBody.content["application/json"].schema.$ref).toMatch(/AdjustmentRequest/);
+    expect(route.responses["200"].content["application/json"].schema.$ref).toMatch(/AdjustmentResult/);
   });
 });
 

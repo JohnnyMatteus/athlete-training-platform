@@ -3,7 +3,7 @@ COMPOSE := docker compose --profile core --profile tools
 ENV_FILE := $(if $(wildcard .env),.env,.env.example)
 DC := $(COMPOSE) --env-file $(ENV_FILE)
 
-.PHONY: help env up down logs ps migrate migrate-test lint test test-integration contracts-check clean
+.PHONY: dev-keys help env up down logs ps migrate migrate-test lint test test-integration contracts-check clean
 
 help: ## Lista os alvos
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -11,7 +11,10 @@ help: ## Lista os alvos
 env: ## Cria .env a partir de .env.example
 	@test -f .env || cp .env.example .env
 
-up: env ## Sobe Postgres+Timescale, RabbitMQ, MinIO e tusd
+dev-keys: ## Gera o par de chaves JWT de desenvolvimento (token: infra/scripts/dev-jwt.sh token)
+	./infra/scripts/dev-jwt.sh keys
+
+up: env dev-keys ## Sobe Postgres+Timescale, RabbitMQ, MinIO e tusd
 	$(DC) up -d --wait postgres rabbitmq minio minio-init tusd
 
 down: ## Para a infraestrutura (mantém volumes)

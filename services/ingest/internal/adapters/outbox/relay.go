@@ -12,7 +12,7 @@ import (
 
 // Publisher envia uma mensagem ao broker e só retorna depois da confirmação dele.
 type Publisher interface {
-	Publish(ctx context.Context, routingKey string, messageID uuid.UUID, eventType string, body []byte) error
+	Publish(ctx context.Context, routingKey string, messageID uuid.UUID, eventType, traceparent string, body []byte) error
 }
 
 // Relay lê os eventos pendentes em ordem de criação e os publica.
@@ -61,7 +61,7 @@ func (r *Relay) Flush(ctx context.Context) (int, error) {
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	rows, err := tx.Query(ctx, `
-		SELECT id, event_id, routing_key, tipo, payload FROM outbox
+		SELECT id, event_id, routing_key, tipo, payload, coalesce(traceparent, '') FROM outbox
 		WHERE enviado_em IS NULL ORDER BY id LIMIT $1 FOR UPDATE SKIP LOCKED`, r.batch)
 	if err != nil {
 		return 0, err
@@ -70,12 +70,13 @@ func (r *Relay) Flush(ctx context.Context) (int, error) {
 		id       int64
 		eventID  uuid.UUID
 		key, typ string
+		trace    string
 		payload  []byte
 	}
 	var items []item
 	for rows.Next() {
 		var it item
-		if err := rows.Scan(&it.id, &it.eventID, &it.key, &it.typ, &it.payload); err != nil {
+		if err := rows.Scan(&it.id, &it.eventID, &it.key, &it.typ, &it.payload, &it.trace); err != nil {
 			rows.Close()
 			return 0, err
 		}
@@ -89,7 +90,7 @@ func (r *Relay) Flush(ctx context.Context) (int, error) {
 	sent := make([]int64, 0, len(items))
 	var pubErr error
 	for _, it := range items {
-		if pubErr = r.pub.Publish(ctx, it.key, it.eventID, it.typ, it.payload); pubErr != nil {
+		if pubErr = r.pub.Publish(ctx, it.key, it.eventID, it.typ, it.trace, it.payload); pubErr != nil {
 			break // preserva a ordem: nada depois deste é enviado
 		}
 		sent = append(sent, it.id)

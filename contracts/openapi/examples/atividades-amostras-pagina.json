@@ -1,0 +1,26 @@
+{
+  "atividade_id": "7a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+  "atleta_id": "2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01",
+  "tipo": "ciclismo_outdoor",
+  "inicio_utc": "2026-03-01T07:00:00Z",
+  "duracao_s": 3600,
+  "proximo_cursor": "MjAyNi0wMy0wMVQwNzowMDowMVo",
+  "amostras": [
+    {
+      "ts": "2026-03-01T07:00:00Z",
+      "fc_bpm": 120,
+      "potencia_w": 200,
+      "cadencia": 85,
+      "velocidade": 8.3,
+      "altitude_m": 12.5
+    },
+    {
+      "ts": "2026-03-01T07:00:01Z",
+      "fc_bpm": null,
+      "potencia_w": null,
+      "cadencia": null,
+      "velocidade": null,
+      "altitude_m": null
+    }
+  ]
+}

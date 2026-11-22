@@ -1,4 +1,4 @@
-// Package postgres implementa app/metrics.UnitOfWork sobre o banco `metricas` e lê as amostras do banco `atividades`.
+// Package postgres implementa app/metrics.UnitOfWork sobre o banco `metricas` .
 package postgres
 
 import (
@@ -12,6 +12,7 @@ import (
 
 	"github.com/JohnnyMatteus/athlete-training-platform/services/metrics/internal/app/metrics"
 	"github.com/JohnnyMatteus/athlete-training-platform/services/metrics/internal/domain/load"
+	"github.com/JohnnyMatteus/athlete-training-platform/services/metrics/internal/telemetry"
 )
 
 // Store é o UnitOfWork.
@@ -153,8 +154,10 @@ func (t *txn) UpsertDaily(ctx context.Context, athlete uuid.UUID, rows []load.Da
 
 func (t *txn) Enqueue(ctx context.Context, e metrics.OutEvent) error {
 	_, err := t.tx.Exec(ctx, `
-		INSERT INTO outbox (event_id, aggregate_id, routing_key, tipo, versao, payload) VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (event_id) DO NOTHING`, e.EventID, e.AggregateID, e.RoutingKey, e.Type, e.Version, e.Payload)
+		INSERT INTO outbox (event_id, aggregate_id, routing_key, tipo, versao, payload, traceparent)
+		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, ''))
+		ON CONFLICT (event_id) DO NOTHING`, e.EventID, e.AggregateID, e.RoutingKey, e.Type, e.Version, e.Payload,
+		telemetry.Traceparent(ctx))
 	return err
 }
 

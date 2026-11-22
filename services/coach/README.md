@@ -49,7 +49,7 @@ Via compose (profile próprio `coach`; `make up` não o inclui; o Redis não tem
 
 ## Próximos passos
 
-- Planejamento expor `POST /planos/{id}/ajustes/validacao` (mesmo corpo e resposta de `/ajustes`, sem efeito). Enquanto não existir, o Coach falha fechado: nenhuma proposta é criada.
+- Planejamento implementar `POST /planos/{id}/ajustes/validacao` (já no contrato). Enquanto responder 404, o Coach falha fechado: nenhuma proposta é criada.
 - Rota persistida de "atleta relatou dor" para o bloqueio valer além da conversa.
 - Autor definir o id do modelo, o orçamento em moeda e revisar a lista de termos de saúde (ADR 0023).
 - Tela do app para propostas e aprovação (escopo do app).

@@ -12,14 +12,13 @@ info:
     (`services/coach/src/infrastructure/http/wire.ts`).
 
     Este arquivo existe para que o teste de contrato do Coach (`services/coach/test/contract.test.ts`)
-    tenha exemplos versionados neste repositório. Quando os contratos donos chegarem à main, a fonte da
+    tenha exemplos versionados neste repositório. A fonte da
     verdade é o contrato dono; divergência é bug de um dos lados.
 
-    PENDENTE NO PLANEJAMENTO: `POST /planos/{plano_id}/ajustes/validacao`, com o mesmo corpo e a mesma
-    resposta de `/ajustes` (`AdjustmentResult`), sem efeito algum: não grava, não cria versão, não publica
-    evento, não muda o status do plano. Hoje `/ajustes` valida e, se aceito, aplica; o Coach só a chama depois
-    da aprovação explícita (ADR 0005) e nunca a usa para validar, nem com parâmetro. Enquanto a rota não existir
-    ela responde 404 e o Coach falha fechado: nenhuma proposta é criada.
+    ROTA DE VALIDAÇÃO: `POST /planos/{plano_id}/ajustes/validacao` está no contrato dono (`planejamento.yaml`),
+    com o mesmo corpo e a mesma resposta de `/ajustes` e sem efeito algum. A IMPLEMENTAÇÃO AINDA NÃO EXISTE no
+    Planejamento: o servidor responde 404 e o Coach falha fechado, sem criar proposta. `/ajustes` escreve no plano;
+    o Coach só a chama depois da aprovação explícita (ADR 0005) e nunca a usa para validar, nem com parâmetro.
 servers:
   - url: http://localhost:8121
     description: Métricas
@@ -304,7 +303,7 @@ paths:
     post:
       tags: [planejamento]
       operationId: validateAdjustment
-      summary: Valida o ajuste sem efeito algum (PENDENTE no Planejamento)
+      summary: Valida o ajuste sem efeito algum (sem efeito; implementação ainda inexistente no Planejamento)
       description: Mesmo corpo e resposta de `/ajustes`; não grava nada.
       security: [{bearerAuth: []}]
       parameters:
