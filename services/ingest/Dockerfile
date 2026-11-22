@@ -10,4 +10,5 @@ RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/worker 
 FROM gcr.io/distroless/static-debian12:nonroot
 COPY --from=build /out/worker /worker
 USER nonroot:nonroot
+EXPOSE 8122
 ENTRYPOINT ["/worker"]
