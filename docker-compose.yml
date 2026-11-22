@@ -232,6 +232,74 @@ services:
     restart: unless-stopped
     networks: [atp]
 
+  # Planejamento (Hyperf): API na 8120, relay da outbox e consumidor de métricas em processos próprios.
+  planning:
+    build: ./services/planning
+    profiles: [core]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment: &planning-env
+      HTTP_PORT: 8120
+      DB_HOST: postgres
+      DB_DATABASE: planejamento
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: planning
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "${PLANNING_HTTP_PORT:-8120}:8120"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8120/health') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [atp]
+
+  # Workers sem HTTP: o healthcheck é o comando worker:health (processo vivo e broker/banco alcançáveis).
+  planning-relay:
+    build: ./services/planning
+    profiles: [core]
+    command: ["outbox:relay"]
+    depends_on:
+      planning:
+        condition: service_healthy
+    environment: *planning-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  planning-consumer:
+    build: ./services/planning
+    profiles: [core]
+    command: ["planejamento:consume-metricas"]
+    depends_on:
+      planning:
+        condition: service_healthy
+    environment: *planning-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
   # Aplica as migrações de cada contexto (golang-migrate). Uso: make migrate
   migrate:
     image: migrate/migrate:v4.18.1
@@ -249,7 +317,8 @@ services:
       - >
         migrate -path /migrations/importacao -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/importacao?sslmode=disable" up &&
         migrate -path /migrations/atividades -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/atividades?sslmode=disable" up &&
-        migrate -path /migrations/metricas -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/metricas?sslmode=disable" up
+        migrate -path /migrations/metricas -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/metricas?sslmode=disable" up &&
+        migrate -path /migrations/planejamento -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/planejamento?sslmode=disable" up
     restart: "no"
     networks: [atp]
 

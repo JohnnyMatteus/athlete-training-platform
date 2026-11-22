@@ -36,6 +36,7 @@ psql_ -d atividades -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;' >/dev/null
 migrate_ importacao up
 migrate_ atividades up
 migrate_ metricas up
+migrate_ planejamento up
 
 assert "$(psql_ -d atividades -c "SELECT hypertable_name FROM timescaledb_information.hypertables")" amostra "amostra é hypertable"
 assert "$(psql_ -d atividades -c "SELECT count(*) FROM timescaledb_information.dimensions WHERE column_name='ts'")" 1 "particionada por ts"
@@ -59,6 +60,7 @@ if psql_ -d metricas -c "INSERT INTO limiar VALUES ('2f0f0a2e-6a53-4c3a-9d8e-1b7
   echo "FALHOU: limiar duplicado na mesma data foi aceito"; exit 1
 fi
 
+migrate_ planejamento down -all
 migrate_ metricas down -all
 migrate_ atividades down -all
 migrate_ importacao down -all
@@ -66,8 +68,10 @@ assert "$(psql_ -d atividades -c "SELECT count(*) FROM pg_tables WHERE schemanam
 assert "$(psql_ -d importacao -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations'")" 0 "importacao vazio após rollback"
 
 assert "$(psql_ -d metricas -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations'")" 0 "metricas vazio após rollback"
+assert "$(psql_ -d planejamento -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations'")" 0 "planejamento vazio após rollback"
 
 migrate_ importacao up
 migrate_ atividades up
 migrate_ metricas up
+migrate_ planejamento up
 echo "migrações ok"

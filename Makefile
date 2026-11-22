@@ -34,11 +34,13 @@ migrate-test: ## Valida migrações (up, esquema, down, up) num Postgres descart
 
 lint: ## Lint dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer lint); fi
+	@if [ -f services/planning/composer.json ]; then (cd services/planning && composer lint); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go vet ./... && golangci-lint run); fi
 	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go vet ./... && golangci-lint run); fi
 
 test: ## Testes unitários dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test); fi
+	@if [ -f services/planning/composer.json ]; then (cd services/planning && composer test); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go test ./...); fi
 	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go test ./...); fi
 

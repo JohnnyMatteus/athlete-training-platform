@@ -18,6 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       api: ${{ steps.filter.outputs.api }}
+      planning: ${{ steps.filter.outputs.planning }}
       ingest: ${{ steps.filter.outputs.ingest }}
       metrics: ${{ steps.filter.outputs.metrics }}
       contracts: ${{ steps.filter.outputs.contracts }}
@@ -30,6 +31,9 @@ jobs:
           filters: |
             api:
               - 'services/api/**'
+              - 'contracts/**'
+            planning:
+              - 'services/planning/**'
               - 'contracts/**'
             ingest:
               - 'services/ingest/**'
@@ -67,6 +71,23 @@ jobs:
           composer lint
           composer test
           if composer run-script --list | grep -q 'test:integration'; then composer test:integration; fi
+
+  planning:
+    needs: changes
+    if: needs.changes.outputs.planning == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: swoole, pdo_pgsql, bcmath, sockets
+          tools: composer
+      - working-directory: services/planning
+        run: |
+          composer install --no-interaction --prefer-dist
+          composer lint
+          composer test
 
   metrics:
     needs: changes
@@ -176,7 +197,7 @@ jobs:
   ci:
     name: ci-ok
     if: always()
-    needs: [changes, api, ingest, metrics, contracts, infra]
+    needs: [changes, api, planning, ingest, metrics, contracts, infra]
     runs-on: ubuntu-latest
     steps:
       - name: Falha se algum job falhou ou foi cancelado
