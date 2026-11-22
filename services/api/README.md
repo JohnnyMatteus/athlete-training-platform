@@ -12,7 +12,7 @@ Autenticação: JWT RS256 validado pela API (ADR 0011). Comando `outbox:relay` p
 
 Contrato: `contracts/openapi/imports.yaml` e `contracts/events/importacao/` (um teste valida os eventos da API contra os esquemas). A API também consome `api.importacao-resultado` (`php bin/hyperf.php importacao:consume-results`) para atualizar o lote; `outbox:relay` publica a outbox.
 
-Hook do tusd: o cliente envia `import_id` em `Upload-Metadata` e `Authorization: Bearer <jwt>`; o tusd precisa de `-hooks-http-forward-headers=Authorization` e `-hooks-enabled-events=pre-create,post-finish`. `object_key` do evento é o ID do upload. `TUSD_HOOK_SECRET` (opcional) exige `?token=` na URL do hook.
+Hook do tusd: o cliente envia `import_id` em `Upload-Metadata` e `Authorization: Bearer <jwt>`; o tusd precisa de `-hooks-http-forward-headers=Authorization` e `-hooks-enabled-events=pre-create,post-finish`. `object_key` do evento é a chave do objeto no bucket (`Storage.Key` do hook; o `Upload.ID` do tusd leva o sufixo do multipart e não serve de chave). `TUSD_HOOK_SECRET` é obrigatório: o hook só é aceito com `?token=<valor>` na URL (comparação em tempo constante); com o segredo vazio a API recusa todos os hooks com 403. O `post-finish` só aceita o bucket `UPLOADS_BUCKET`; outro bucket é recusado sem ler o objeto e sem alterar o lote. A API (9501) e o tusd (8080) ficam publicados só em `127.0.0.1` no compose.
 
 Contrato e migrações: coluna `consentimento` em `lote_importacao` (migração 000003) e `consentimento` obrigatório no `POST /imports`; autenticação JWT no lugar do `ATHLETE_ID` (ADR 0011).
 

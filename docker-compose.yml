@@ -78,7 +78,8 @@ services:
       - -base-path=/files/
       - -s3-bucket=${UPLOADS_BUCKET:-uploads}
       - -s3-endpoint=http://localstack:4566
-      - -hooks-http=http://api:9501/hooks/tus
+      # O token do hook vem da mesma variável da API (TUSD_HOOK_SECRET); use só caracteres seguros em URL.
+      - -hooks-http=http://api:9501/hooks/tus?token=${TUSD_HOOK_SECRET:-dev-only-tusd-hook-secret}
       - -hooks-http-forward-headers=Authorization
       - -hooks-enabled-events=pre-create,post-finish
     environment:
@@ -86,7 +87,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
       AWS_REGION: us-east-1
     ports:
-      - "${TUSD_PORT:-8080}:8080"
+      - "127.0.0.1:${TUSD_PORT:-8080}:8080"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:
@@ -129,6 +130,9 @@ services:
       S3_ENDPOINT: http://localstack:4566
       S3_KEY: ${S3_ACCESS_KEY}
       S3_SECRET: ${S3_SECRET_KEY}
+      # O hook do tusd só é aceito com ?token=<este valor>; vazio recusa todos os hooks. Bucket único aceito no post-finish.
+      TUSD_HOOK_SECRET: ${TUSD_HOOK_SECRET:-dev-only-tusd-hook-secret}
+      UPLOADS_BUCKET: ${UPLOADS_BUCKET:-uploads}
       TUS_PUBLIC_URL: http://localhost:${TUSD_PORT:-8080}/files/
       JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
       JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
@@ -138,7 +142,7 @@ services:
     volumes:
       - ./services/api/runtime:/run/jwt:ro
     ports:
-      - "${HTTP_PORT:-9501}:9501"
+      - "127.0.0.1:${HTTP_PORT:-9501}:9501"
     healthcheck:
       test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:9501/health') === false ? 1 : 0);"]
       interval: 10s
