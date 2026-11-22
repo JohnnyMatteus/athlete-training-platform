@@ -114,7 +114,13 @@ paths:
     post:
       tags: [hooks]
       operationId: tusHook
-      security: []  # chamada interna do tusd: sem JWT; o segredo do hook (TUSD_HOOK_SECRET) fica fora do contrato
+      security: []  # chamada interna do tusd: sem JWT; autenticada pelo segredo em `token`
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: {type: string}
+          description: Segredo compartilhado com o tusd (TUSD_HOOK_SECRET)
       summary: Hook HTTP do tusd
       description: |
         Chamado pelo `tusd` (`-hooks-http`) nos eventos `pre-create` e `post-finish`.
@@ -127,7 +133,9 @@ paths:
           `ImportacaoRecebida` entra na outbox; se não, o lote passa a `falhou` e `ImportacaoFalhou`
           entra na outbox.
 
-        A resposta é sempre 200; a rejeição vai no corpo, conforme o formato de hooks do tusd v2.
+        A rejeição de upload no `pre-create` vem com 200, no corpo, conforme o formato de hooks do
+        tusd v2. Chamada sem o token certo, ou `post-finish` de bucket diferente do configurado,
+        recebe 403 e não lê objeto nem altera lote.
       requestBody:
         required: true
         content:
@@ -141,6 +149,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TusHookResponse'
+        '403':
+          description: Token ausente ou inválido, ou bucket não permitido
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [error]
+                properties:
+                  error: {type: string, const: forbidden}
 components:
   securitySchemes:
     bearerAuth:
