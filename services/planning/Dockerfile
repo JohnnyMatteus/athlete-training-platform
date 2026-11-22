@@ -8,13 +8,14 @@ RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --opti
 
 FROM php:8.4-cli-alpine3.23 AS runtime
 # Extensões do Hyperf: swoole (versão fixada), pgsql para PDO, sockets e pcntl para o servidor.
-RUN apk add --no-cache libpq libstdc++ brotli-libs \
- && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS postgresql-dev linux-headers brotli-dev openssl-dev \
- && pecl install swoole-6.2.6 \
+RUN apk add --no-cache libpq libstdc++ brotli-libs libcurl \
+ && apk add --no-cache --virtual .build-deps $PHPIZE_DEPS postgresql-dev linux-headers brotli-dev openssl-dev curl-dev \
+ && pecl install -D 'enable-swoole-curl="yes"' swoole-6.2.6 \
  && docker-php-ext-enable swoole \
  && docker-php-ext-install pdo_pgsql pcntl sockets \
  && apk del .build-deps \
- && php --ri swoole > /dev/null && php --ri sockets > /dev/null && php --ri pdo_pgsql > /dev/null
+ && php --ri swoole > /dev/null && php --ri sockets > /dev/null && php --ri pdo_pgsql > /dev/null \
+ && php -r 'exit(defined("SWOOLE_HOOK_NATIVE_CURL") ? 0 : 1);'
 WORKDIR /app
 COPY --from=deps /app/vendor ./vendor
 COPY . .

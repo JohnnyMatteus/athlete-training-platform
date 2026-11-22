@@ -45,8 +45,14 @@ final class TusdHookController
         return match ($hook->type) {
             'pre-create' => $this->preCreate($hook),
             'post-finish' => $this->postFinish($hook),
-            default => $this->response->json([]),
+            default => $this->accepted(),
         };
+    }
+
+    /** O tusd exige um objeto JSON: um array vazio do PHP viraria `[]` e ele recusa a resposta. */
+    private function accepted(): Psr7Response
+    {
+        return $this->response->json(['RejectUpload' => false]);
     }
 
     private function preCreate(TusdHook $hook): Psr7Response
@@ -67,7 +73,7 @@ final class TusdHookController
             ]);
         }
 
-        return $this->response->json([]);
+        return $this->accepted();
     }
 
     private function postFinish(TusdHook $hook): Psr7Response
@@ -91,6 +97,6 @@ final class TusdHookController
             $span->end();
         }
 
-        return $this->response->json([]);
+        return $this->accepted();
     }
 }
