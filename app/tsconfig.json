@@ -14,6 +14,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@capacitor/core": ["./node_modules/@capacitor/core"],
+      "vitest": ["./node_modules/vitest"],
       "@atp/capacitor-workoutkit": ["../plugins/capacitor-workoutkit/src/index.ts"]
     }
   },
