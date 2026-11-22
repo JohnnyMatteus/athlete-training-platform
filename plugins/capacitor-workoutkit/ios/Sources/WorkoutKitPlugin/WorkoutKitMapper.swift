@@ -29,7 +29,11 @@ enum WorkoutKitMapper {
     }
 
     private static func step(_ s: BlueprintStep) -> WorkoutStep {
-        WorkoutStep(goal: goal(s.goal), alert: alert(s.target), displayName: s.name)
+        // O nome do passo só existe a partir do iOS 18; no 17 o passo vai sem nome.
+        if #available(iOS 18.0, *) {
+            return WorkoutStep(goal: goal(s.goal), alert: alert(s.target), displayName: s.name)
+        }
+        return WorkoutStep(goal: goal(s.goal), alert: alert(s.target))
     }
 
     private static func goal(_ g: Goal) -> WorkoutGoal {
@@ -42,13 +46,18 @@ enum WorkoutKitMapper {
 
     private static func alert(_ t: Target?) -> (any WorkoutAlert)? {
         switch t {
-        case .heartRate(let a, let b): return HeartRateRangeAlert(target: a...b)
+        case .heartRate(let a, let b):
+            let bpm = WorkoutAlertMetric.countPerMinute
+            return HeartRateRangeAlert(target: Measurement(value: a, unit: bpm)...Measurement(value: b, unit: bpm))
         case .heartRateZone(let z): return HeartRateZoneAlert(zone: z)
         case .power(let a, let b):
             return PowerRangeAlert(target: Measurement(value: a, unit: UnitPower.watts)...Measurement(value: b, unit: UnitPower.watts))
         case .powerZone(let z): return PowerZoneAlert(zone: z)
         case .speed(let a, let b):
-            return SpeedRangeAlert(target: Measurement(value: a, unit: UnitSpeed.metersPerSecond)...Measurement(value: b, unit: UnitSpeed.metersPerSecond))
+            return SpeedRangeAlert(
+                target: Measurement(value: a, unit: UnitSpeed.metersPerSecond)...Measurement(value: b, unit: UnitSpeed.metersPerSecond),
+                metric: .current
+            )
         case nil: return nil
         }
     }
