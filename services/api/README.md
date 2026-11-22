@@ -14,6 +14,6 @@ Contrato: `contracts/openapi/imports.yaml` e `contracts/events/importacao/` (um 
 
 Hook do tusd: o cliente envia `import_id` em `Upload-Metadata` e `Authorization: Bearer <jwt>`; o tusd precisa de `-hooks-http-forward-headers=Authorization` e `-hooks-enabled-events=pre-create,post-finish`. `object_key` do evento é o ID do upload. `TUSD_HOOK_SECRET` (opcional) exige `?token=` na URL do hook.
 
-Pendências no contrato/migrações (fundação): coluna `consentimento jsonb NOT NULL DEFAULT '{}'` em `lote_importacao`; `consentimento` no corpo do `POST /imports` do OpenAPI e autenticação JWT no lugar de `ATHLETE_ID`.
+Contrato e migrações: coluna `consentimento` em `lote_importacao` (migração 000003) e `consentimento` obrigatório no `POST /imports`; autenticação JWT no lugar do `ATHLETE_ID` (ADR 0011).
 
 Testes: `composer install --ignore-platform-req=ext-swoole && composer test` (unitários, sem Docker). `composer lint` roda php-cs-fixer e PHPStan nível 6.
