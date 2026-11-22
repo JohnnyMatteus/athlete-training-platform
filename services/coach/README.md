@@ -10,7 +10,7 @@ A IA só propõe. Ela lê métricas, atividades e plano pelos contratos HTTP dos
 mensagem -> screen (dor/lesão/sintoma? resposta padrão, sem modelo)
          -> gather (ferramentas MCP; dados mínimos para o modelo)
          -> draft  (reserva de tokens; saída validada por Zod; filtro de conselho médico)
-         -> validate (propose_adjustment -> validador do Planejamento, dry run)
+         -> validate (propose_adjustment -> validador do Planejamento, rota sem efeito)
               rejeitou: volta ao draft com as violações (até COACH_MAX_LLM_CALLS)
               aceitou:  proposta pendente no Redis
 aprovação explícita (POST /coach/proposals/{id}/approve) -> revalida -> POST /planos/{id}/ajustes
@@ -39,7 +39,7 @@ npm run test:evals  # 30 cenários com modelo falso
 npm run build
 ```
 
-Via compose (`make up` não o inclui): `docker compose --profile core --env-file .env up -d redis coach`, com `ANTHROPIC_API_KEY` e `COACH_LLM_MODEL` no `.env`. Variáveis em `src/config.ts` e `.env.example`.
+Via compose (profile próprio `coach`; `make up` não o inclui; o Redis não tem porta no host): `docker compose --profile coach --env-file .env up -d redis coach`, com `ANTHROPIC_API_KEY` e `COACH_LLM_MODEL` no `.env`. Variáveis em `src/config.ts` e `.env.example`.
 
 ## O que foi e o que não foi exercitado
 
@@ -49,7 +49,7 @@ Via compose (`make up` não o inclui): `docker compose --profile core --env-file
 
 ## Próximos passos
 
-- Planejamento aceitar `POST /planos/{id}/ajustes?dry_run=true` (ver `coach-ports.yaml`).
+- Planejamento expor `POST /planos/{id}/ajustes/validacao` (mesmo corpo e resposta de `/ajustes`, sem efeito). Enquanto não existir, o Coach falha fechado: nenhuma proposta é criada.
 - Rota persistida de "atleta relatou dor" para o bloqueio valer além da conversa.
 - Autor definir o id do modelo, o orçamento em moeda e revisar a lista de termos de saúde (ADR 0023).
 - Tela do app para propostas e aprovação (escopo do app).

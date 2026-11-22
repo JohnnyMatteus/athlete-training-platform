@@ -89,14 +89,21 @@ function adjustmentBody(d: ProposalDraft) {
 }
 
 /**
- * Dry run of POST /planos/{id}/ajustes. The `dry_run=true` query is NOT in the planning contract yet:
- * it is the port the coach requires (contracts/openapi/coach-ports.yaml, section "Pendente no Planejamento").
+ * Validation goes through its own route, POST /planos/{id}/ajustes/validacao (same body and answer, no effect).
+ * It is NOT in the planning contract yet. The write route is never used for validation, with or without a flag:
+ * a server that ignores unknown query parameters would apply the change. While the route is missing the
+ * answer is 404 and validation fails closed: no proposal is stored.
  */
 export class HttpPlanValidator implements PlanValidatorPort {
   constructor(private readonly planning: HttpJson) {}
   async validate(s: Subject, planId: string, draft: ProposalDraft): Promise<ValidationResult> {
-    const res = await this.planning.request(s.principal.token, "POST", `/planos/${enc(planId)}/ajustes?dry_run=true`, WireAdjustmentResult, adjustmentBody(draft));
-    return { valid: res.aceito, violations: res.violacoes.map((v) => ({ rule: v.regra, message: v.mensagem })) };
+    try {
+      const res = await this.planning.request(s.principal.token, "POST", `/planos/${enc(planId)}/ajustes/validacao`, WireAdjustmentResult, adjustmentBody(draft));
+      return { valid: res.aceito, violations: res.violacoes.map((v) => ({ rule: v.regra, message: v.mensagem })) };
+    } catch (e) {
+      if (e instanceof CoachError && e.code === "not_found") throw new CoachError("upstream", "planning validation route is not available; no proposal was made");
+      throw e;
+    }
   }
 }
 

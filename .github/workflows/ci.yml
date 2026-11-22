@@ -189,7 +189,7 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose --profile core --profile tools --env-file .env.example config -q
+      - run: docker compose --profile core --profile tools --profile coach --env-file .env.example config -q
       - name: Migrações (up, esquema, down, up)
         env:
           PGHOST: 127.0.0.1

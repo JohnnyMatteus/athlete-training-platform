@@ -11,7 +11,7 @@ Fonte da verdade dos contratos entre serviços. Mudar um contrato aqui exige atu
 | `events/planejamento/*.v1.schema.json` | `PlanoGerado`, `TreinoPlanejado`, `PlanoAjustado` (exchange `planejamento`) |
 | `events/atleta/*.v1.schema.json` | `VinculoTreinadorConsentido`, `VinculoTreinadorRevogado` (exchange `atleta`) |
 | `events/metricas/limiar-atualizado.v1.schema.json` | `LimiarAtualizado` (exchange `metricas`) |
-| `openapi/coach-ports.yaml` | Subconjunto de métricas e planejamento consumido pelo Coach IA, com `dry_run` pendente no Planejamento (ADR 0021) |
+| `openapi/coach-ports.yaml` | Subconjunto de métricas e planejamento consumido pelo Coach IA, com `/ajustes/validacao` pendente no Planejamento (ADR 0021) |
 | `asyncapi.yaml` | Canais e operações dos eventos no RabbitMQ |
 | `openapi/imports.yaml` | API HTTP de importação (`POST /imports`, `GET /imports/{id}`, hook do tusd) |
 | `openapi/planejamento.yaml` | API de Planejamento: planos, ajustes, aprovação, aderência, export .fit, vínculos (porta 8120) |

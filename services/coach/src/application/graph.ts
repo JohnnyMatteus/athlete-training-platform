@@ -8,7 +8,7 @@ import { CoachError } from "./errors.js";
 import { McpToolClient, ToolError } from "./mcp-client.js";
 import type { BudgetPort, LlmPort } from "./ports.js";
 import { buildUserPrompt, SYSTEM_PROMPT } from "./prompts.js";
-import type { ProposeResult } from "./toolkit.js";
+import { ProposalSchemaLoose } from "./toolkit-schema.js";
 
 export interface GraphConfig {
   maxLlmCalls: number;
@@ -149,7 +149,7 @@ export function buildCoachGraph(deps: { mcp: McpToolClient; llm: LlmPort; budget
   };
 
   const validate = async (s: S): Promise<Partial<S>> => {
-    const res = await mcp.call<ProposeResult>("propose_adjustment", s.pending!.draft as Record<string, unknown>);
+    const res = await tool(mcp, "propose_adjustment", s.pending!.draft as Record<string, unknown>, ProposalSchemaLoose);
     if (res.status === "stored") return { result: { kind: "proposal", message: s.pending!.message, proposal: res.proposal } };
     return s.calls >= config.maxLlmCalls
       ? { violations: res.violations, pending: null, result: { kind: "no_valid_proposal", message: NO_VALID, violations: res.violations } }

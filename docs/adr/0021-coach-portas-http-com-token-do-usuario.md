@@ -22,5 +22,5 @@ Contexto nenhum lê o banco de outro. O Coach precisa de perfil, limiares, carga
 
 ## Consequências
 
-- Pendente no Planejamento: `POST /planos/{id}/ajustes?dry_run=true`, para validar sem gravar. Sem ele, a pré-validação não funciona; o adaptador e o teste já o assumem.
+- Pendente no Planejamento: `POST /planos/{id}/ajustes/validacao` (mesmo corpo e resposta de `/ajustes`, sem efeito), para validar antes da aprovação. A rota de escrita nunca é usada para validar, nem com flag: servidor que ignora query desconhecida aplicaria a mudança. Sem a rota (404) o Coach falha fechado, sem criar proposta; o adaptador e o teste assumem isso.
 - Não existe hoje rota que informe "atleta marcou dor" de forma persistida; o bloqueio por dor do Coach depende do texto da conversa.

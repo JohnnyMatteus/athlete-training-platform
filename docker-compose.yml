@@ -170,12 +170,11 @@ services:
     networks: [atp]
 
   # Estado do Coach IA: propostas pendentes e orçamento diário de tokens (ADR 0025).
+  # Sem porta no host e sem senha: só a rede interna alcança; quem escreve aqui forja proposta pendente.
   redis:
     image: redis:7.4.1-alpine
-    profiles: [core]
+    profiles: [coach]
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -184,10 +183,11 @@ services:
     networks: [atp]
 
   # Coach IA (LangGraph + MCP). Lê métricas e planejamento por HTTP com o JWT do usuário (ADR 0021).
-  # Sem ANTHROPIC_API_KEY o processo recusa subir: não há modelo simulado em produção.
+  # Profile próprio `coach`: sem ANTHROPIC_API_KEY o processo recusa subir (não há modelo simulado), então fica fora do `make up`.
+  # Uso: docker compose --profile coach --env-file .env up -d redis coach
   coach:
     build: ./services/coach
-    profiles: [core]
+    profiles: [coach]
     depends_on:
       redis:
         condition: service_healthy

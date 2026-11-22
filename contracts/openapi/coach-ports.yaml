@@ -15,10 +15,11 @@ info:
     tenha exemplos versionados neste repositório. Quando os contratos donos chegarem à main, a fonte da
     verdade é o contrato dono; divergência é bug de um dos lados.
 
-    PENDENTE NO PLANEJAMENTO: `POST /planos/{plano_id}/ajustes?dry_run=true`. Hoje `/ajustes` valida e,
-    se aceito, aplica. O Coach só pode aplicar depois da aprovação explícita (ADR 0005), então precisa
-    validar antes sem gravar. `dry_run=true` deve executar o validador e responder `AdjustmentResult`
-    sem criar versão, sem publicar evento e sem mudar o status do plano.
+    PENDENTE NO PLANEJAMENTO: `POST /planos/{plano_id}/ajustes/validacao`, com o mesmo corpo e a mesma
+    resposta de `/ajustes` (`AdjustmentResult`), sem efeito algum: não grava, não cria versão, não publica
+    evento, não muda o status do plano. Hoje `/ajustes` valida e, se aceito, aplica; o Coach só a chama depois
+    da aprovação explícita (ADR 0005) e nunca a usa para validar, nem com parâmetro. Enquanto a rota não existir
+    ela responde 404 e o Coach falha fechado: nenhuma proposta é criada.
 servers:
   - url: http://localhost:8121
     description: Métricas
@@ -246,12 +247,68 @@ paths:
       operationId: proposeAdjustment
       summary: Valida e, se aceito, aplica o ajuste
       description: |
-        Sem `dry_run`: contrato existente (`planejamento.yaml`); o Coach só chama depois da aprovação explícita,
-        com `origem: coach`. Com `dry_run=true`: PENDENTE (ver descrição do arquivo).
+        Contrato existente (`planejamento.yaml`). Escreve no plano. O Coach só chama depois da aprovação
+        explícita, com `origem: coach`, e nunca para validar.
       security: [{bearerAuth: []}]
       parameters:
         - {$ref: '#/components/parameters/PlanoId'}
-        - {name: dry_run, in: query, required: false, schema: {type: boolean, default: false}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo, alteracoes]
+              properties:
+                motivo: {type: string, maxLength: 500}
+                origem: {type: string, enum: [atleta, treinador, coach]}
+                relato_dor: {type: boolean}
+                alteracoes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [treino_id, acao]
+                    properties:
+                      treino_id: {type: string, format: uuid}
+                      acao: {type: string, enum: [mover, alterar_intensidade, remover]}
+                      nova_data: {type: string, format: date}
+                      nova_intensidade: {type: string, enum: [descanso, baixa, moderada, alta]}
+            example:
+              motivo: Semana com cansaço relatado
+              origem: coach
+              relato_dor: false
+              alteracoes:
+                - {treino_id: 0a1b2c3d-1111-4222-8333-444455557777, acao: alterar_intensidade, nova_intensidade: baixa}
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [aceito, violacoes]
+                properties:
+                  aceito: {type: boolean}
+                  violacoes:
+                    type: array
+                    items:
+                      type: object
+                      required: [regra, mensagem]
+                      properties:
+                        regra: {type: string}
+                        mensagem: {type: string}
+              example: {aceito: true, violacoes: []}
+        '404': {description: Não encontrado ou sem consentimento}
+  /planos/{plano_id}/ajustes/validacao:
+    post:
+      tags: [planejamento]
+      operationId: validateAdjustment
+      summary: Valida o ajuste sem efeito algum (PENDENTE no Planejamento)
+      description: Mesmo corpo e resposta de `/ajustes`; não grava nada.
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PlanoId'}
       requestBody:
         required: true
         content:

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -80,14 +81,15 @@ describe("coach ports against the published examples", () => {
     expect(none.status).toBe("none");
   });
 
-  it("validates with dry_run and applies without it, always as origem coach", async () => {
+  it("validates on its own no-effect route and applies on /ajustes, always as origem coach", async () => {
     seen.length = 0;
     const draft = { rationale: "cansaço", changes: [{ session_id: S_HARD, action: "replace_intensity" as const, new_intensity: "low" as const }] };
     const verdict = await new HttpPlanValidator(http()).validate(subjectOf(athlete()), PLAN_ID, draft);
     await new HttpPlanApplier(http()).apply(athlete(), { ...draft, id: "i", athleteId: ATHLETE, planId: PLAN_ID, requestedBy: ATHLETE, status: "pending_athlete", createdAt: "", expiresAt: "" });
     expect(verdict.valid).toBe(true);
-    expect(seen[0]?.query.get("dry_run")).toBe("true");
-    expect(seen[1]?.query.has("dry_run")).toBe(false);
+    expect(seen[0]).toMatchObject({ method: "POST", path: `/planos/${PLAN_ID}/ajustes/validacao` });
+    expect(seen[1]).toMatchObject({ method: "POST", path: `/planos/${PLAN_ID}/ajustes` });
+    expect(seen[1]?.query.size).toBe(0);
     expect(seen[1]?.body).toMatchObject({ origem: "coach", alteracoes: [{ treino_id: S_HARD, acao: "alterar_intensidade", nova_intensidade: "baixa" }] });
   });
 
@@ -100,10 +102,23 @@ describe("coach ports against the published examples", () => {
   });
 });
 
+// Route the coach requires. Until it reaches main it is read from the planning branch object, if that is in the clone.
+const VALIDATION = "/planos/{plano_id}/ajustes/validacao";
+function ownerValidation(): any | undefined { // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (planning.paths[VALIDATION]) return planning.paths[VALIDATION];
+  try {
+    const raw = execFileSync("git", ["show", "5107159:contracts/openapi/planejamento.yaml"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    return (parse(raw) as Doc).paths[VALIDATION];
+  } catch {
+    return undefined;
+  }
+}
+
 describe("coach ports against the owner contracts", () => {
   const owners: Array<[string, Doc]> = [["metricas", metrics], ["planejamento", planning]];
   it("every route in coach-ports.yaml exists in the owner contract with the same method", () => {
     for (const [path, methods] of Object.entries(ports.paths)) {
+      if (path === VALIDATION && !planning.paths[VALIDATION]) continue; // pending in the owner contract
       for (const method of Object.keys(methods)) {
         const found = owners.some(([, d]) => d.paths[path]?.[method]);
         expect(found, `${method.toUpperCase()} ${path}`).toBe(true);
@@ -123,9 +138,37 @@ describe("coach ports against the owner contracts", () => {
     expect(s.AdjustmentRequest.properties.origem.enum).toContain("coach");
   });
 
-  it("the owner contract does not yet declare dry_run (pending request, see the README)", () => {
-    const params = planning.paths["/planos/{plano_id}/ajustes"]?.post?.parameters ?? [];
-    const declared = params.some((p: { name?: string }) => p.name === "dry_run");
-    if (declared) throw new Error("dry_run now exists in planejamento.yaml: drop the PENDENTE notes from coach-ports.yaml and the README");
+  it("the no-effect validation route matches the owner's contract when the owner publishes it", () => {
+    const route = ownerValidation();
+    if (!route) return; // not on main yet: the adapter fails closed on 404 (next test)
+    expect(route.post.requestBody.content["application/json"].schema.$ref).toMatch(/AdjustmentRequest/);
+    expect(route.post.responses["200"].content["application/json"].schema.$ref).toMatch(/AdjustmentResult/);
+  });
+});
+
+describe("fail closed against a planning server that has only the current contract", () => {
+  it("never writes before approval: validation 404s and no proposal is stored", async () => {
+    let writes = 0;
+    const owner = createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://x");
+      // Like the real server today: unknown query parameters are ignored, and POST /ajustes validates AND applies.
+      if (req.method === "POST" && url.pathname === `/planos/${PLAN_ID}/ajustes`) {
+        writes++;
+        return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ aceito: true, violacoes: [] }));
+      }
+      res.writeHead(404).end();
+    });
+    await new Promise<void>((ok) => owner.listen(0, "127.0.0.1", ok));
+    const planningHttp = new HttpJson({ baseUrl: `http://127.0.0.1:${(owner.address() as AddressInfo).port}`, timeoutMs: 2000 });
+    const { makeEnv } = await import("./support.js");
+    const { CoachToolkit } = await import("../src/application/toolkit.js");
+    const env = await makeEnv();
+    const toolkit = new CoachToolkit(subjectOf(athlete()), {
+      data: env.data, validator: new HttpPlanValidator(planningHttp), proposals: env.proposals, clock, proposalTtlHours: 48,
+    });
+    await expect(toolkit.proposeAdjustment({ rationale: "x", changes: [{ session_id: S_HARD, action: "skip" }] })).rejects.toMatchObject({ code: "upstream" });
+    expect(writes).toBe(0);
+    expect(await env.proposals.listByAthlete(ATHLETE)).toHaveLength(0);
+    owner.close();
   });
 });

@@ -19,7 +19,7 @@ export interface ValidationResult {
   readonly violations: ReadonlyArray<{ rule: string; message: string }>;
 }
 
-/** The deterministic validator lives in the planning context (ADR 0005); this is only its port. It must not persist anything (dry run). */
+/** The deterministic validator lives in the planning context (ADR 0005); this is only its port. It must have no side effects and must fail closed (throw) when it cannot decide. */
 export interface PlanValidatorPort {
   validate(s: Subject, planId: string, draft: ProposalDraft): Promise<ValidationResult>;
 }
