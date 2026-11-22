@@ -28,6 +28,8 @@ use PhpAmqpLib\Connection\AMQPStreamConnection;
 use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
 
+use function Hyperf\Support\env;
+
 return [
     ImportBatchRepository::class => static fn () => new PgImportBatchRepository(
         new DateInterval((string) env('IMPORT_UPLOAD_TTL', 'PT24H')),

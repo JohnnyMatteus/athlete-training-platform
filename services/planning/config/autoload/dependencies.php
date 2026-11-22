@@ -24,6 +24,8 @@ use App\Infrastructure\Persistence\PgPlanRepository;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use Psr\Clock\ClockInterface;
 
+use function Hyperf\Support\env;
+
 return [
     PlanRepository::class => PgPlanRepository::class,
     LinkRepository::class => PgLinkRepository::class,
