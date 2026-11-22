@@ -40,6 +40,7 @@ final class CreateImportTest extends TestCase
         $result = ($this->create)(new AthleteId(Samples::ATHLETE), Samples::input());
 
         self::assertSame('http://tus.test/files/', $result['upload_url']);
+        self::assertSame('aguardando_upload', $result['status']);
         $batch = $this->batches->find(new ImportId($result['import_id']));
         self::assertNotNull($batch);
         self::assertSame(ImportStatus::AguardandoUpload, $batch->status());
@@ -69,8 +70,8 @@ final class CreateImportTest extends TestCase
     {
         yield 'sem sha256' => [['sha256' => null], 'sha256'];
         yield 'sha256 curto' => [['sha256' => 'abc'], 'sha256'];
-        yield 'tipo fora da lista' => [['tipo' => 'exe', 'nome_arquivo' => 'a.exe'], 'tipo'];
-        yield 'extensão diferente do tipo' => [['tipo' => 'fit', 'nome_arquivo' => 'a.gpx'], 'nome_arquivo'];
+        yield 'tipo fora da lista' => [['tipo_arquivo' => 'exe', 'nome_arquivo' => 'a.exe'], 'tipo_arquivo'];
+        yield 'extensão diferente do tipo' => [['tipo_arquivo' => 'fit', 'nome_arquivo' => 'a.gpx'], 'nome_arquivo'];
         yield 'nome com caminho' => [['nome_arquivo' => '../export.zip'], 'nome_arquivo'];
         yield 'tamanho zero' => [['tamanho_bytes' => 0], 'tamanho_bytes'];
         yield 'tamanho acima do limite' => [['tamanho_bytes' => 3 * 1024 ** 3], 'tamanho_bytes'];
@@ -99,7 +100,7 @@ final class CreateImportTest extends TestCase
             self::fail('esperava ValidationFailed');
         } catch (ValidationFailed $e) {
             self::assertEqualsCanonicalizing(
-                ['tipo', 'sha256', 'consentimento', 'nome_arquivo', 'tamanho_bytes'],
+                ['tipo_arquivo', 'sha256', 'consentimento', 'nome_arquivo', 'tamanho_bytes'],
                 array_keys($e->errors),
             );
         }
@@ -122,7 +123,7 @@ final class CreateImportTest extends TestCase
     {
         $result = ($this->create)(
             new AthleteId(Samples::ATHLETE),
-            Samples::input(['tipo' => $type, 'nome_arquivo' => "treino.$type"]),
+            Samples::input(['tipo_arquivo' => $type, 'nome_arquivo' => "treino.$type"]),
         );
 
         self::assertSame($type, $this->batches->find(new ImportId($result['import_id']))->type->value);

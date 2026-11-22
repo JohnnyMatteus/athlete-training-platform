@@ -16,8 +16,11 @@ final class PgEventOutbox implements EventOutbox
         $envelope = EventEnvelope::from($event, Uuid::uuid7()->toString());
 
         Db::table('outbox')->insert([
-            'id' => $envelope['event_id'],
+            'event_id' => $envelope['event_id'],
+            'aggregate_id' => $event->aggregateId(),
+            'routing_key' => $event->routingKey(),
             'tipo' => $envelope['tipo'],
+            'versao' => $envelope['versao'],
             'payload' => json_encode($envelope, JSON_THROW_ON_ERROR),
             'criado_em' => $event->occurredAt()->format(DATE_ATOM),
         ]);

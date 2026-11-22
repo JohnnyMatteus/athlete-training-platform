@@ -1,4 +1,4 @@
-# 0009. Autenticação do atleta com JWT validado pela API (A-09)
+# 0011. Autenticação do atleta com JWT validado pela API (implementação)
 
 - **Status:** Proposto
 - **Data:** 2026-11-21
@@ -16,7 +16,7 @@ A API de importação precisa saber qual atleta está chamando (lote pertence a 
 - A validação vive numa ACL (`Infrastructure/Acl/JwtAuthenticator`) atrás da porta `Authenticator`; nenhuma classe da biblioteca de JWT atravessa a porta.
 - Lote de outro atleta responde 404 (não revela existência).
 - Upload tus: o hook `pre-create` do tusd recebe o cabeçalho `Authorization` (encaminhado) e só autoriza o atleta dono do lote. Os hooks do tusd usam, além disso, um segredo compartilhado na URL, pois só trafegam na rede interna.
-- Em desenvolvimento, o token é gerado por um script local com um par de chaves de teste; não há atleta fixo no código.
+- Substitui o atleta sintético fixo (`ATHLETE_ID`) suposto no contrato OpenAPI do M1. Em desenvolvimento, o token é gerado por um script local com um par de chaves de teste.
 - Papéis (atleta, treinador, admin) entram quando houver contexto Atleta; a claim `roles` não é lida no M1.
 
 ## Alternativas consideradas

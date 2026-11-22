@@ -7,7 +7,7 @@ namespace App\Infrastructure\Messaging;
 use App\Domain\Shared\DomainEvent;
 use DateTimeZone;
 
-/** Envelope do contrato de eventos: event_id, tipo, versao, ocorrido_em + campos do evento. */
+/** Envelope do contrato (contracts/events/importacao): event_id, tipo, versao, ocorrido_em, import_id, dados. */
 final class EventEnvelope
 {
     /** @return array<string, mixed> */
@@ -18,6 +18,8 @@ final class EventEnvelope
             'tipo' => $event->name(),
             'versao' => $event->version(),
             'ocorrido_em' => $event->occurredAt()->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.v\Z'),
-        ] + $event->payload();
+            'import_id' => $event->aggregateId(),
+            'dados' => $event->data(),
+        ];
     }
 }

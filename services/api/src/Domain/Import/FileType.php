@@ -15,7 +15,7 @@ enum FileType: string
     {
         $type = is_string($value) ? self::tryFrom(strtolower($value)) : null;
 
-        return $type ?? throw ValidationFailed::field('tipo', 'deve ser um de: zip, fit, tcx, gpx');
+        return $type ?? throw ValidationFailed::field('tipo_arquivo', 'deve ser um de: zip, fit, tcx, gpx');
     }
 
     public function matchesFileName(string $name): bool

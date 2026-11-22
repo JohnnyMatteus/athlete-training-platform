@@ -8,6 +8,7 @@ use App\Application\Port\EventOutbox;
 use App\Application\Port\ImportBatchRepository;
 use App\Application\Port\ObjectChecksum;
 use App\Application\Port\Transaction;
+use App\Domain\Import\FailureCode;
 use App\Domain\Import\ImportId;
 use App\Domain\Import\ImportStatus;
 use App\Domain\Import\Sha256;
@@ -25,7 +26,8 @@ final readonly class ConfirmUpload
     ) {
     }
 
-    public function __invoke(ImportId $id, string $storageKey): void
+    /** @param string $uploadId ID do upload no tusd; é também a chave do objeto no bucket (object_key do evento) */
+    public function __invoke(ImportId $id, string $bucket, string $uploadId): void
     {
         $batch = $this->batches->find($id) ?? throw new NotFound('Importação não encontrada');
         if ($batch->status() !== ImportStatus::AguardandoUpload) {
@@ -34,12 +36,16 @@ final readonly class ConfirmUpload
         $now = $this->clock->now();
 
         // Calculado fora da transação: ler o objeto pode levar minutos.
-        $actual = Sha256::fromHex($this->checksum->sha256($storageKey));
+        $actual = Sha256::fromHex($this->checksum->sha256($bucket, $uploadId));
 
         if ($actual->equals($batch->sha256)) {
-            $batch->markReceived($now);
+            $batch->markReceived($now, $bucket, $uploadId);
         } else {
-            $batch->fail('sha256 do arquivo enviado não confere com o declarado', $now);
+            $batch->reject(
+                FailureCode::Sha256Divergente,
+                'O conteúdo enviado não confere com o sha256 declarado.',
+                $now,
+            );
         }
 
         $this->transaction->run(function () use ($batch): void {

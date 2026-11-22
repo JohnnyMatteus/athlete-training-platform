@@ -28,6 +28,11 @@ final class ImportBatch
         public readonly DateTimeImmutable $expiresAt,
         private ImportStatus $status,
         private ?string $failureReason,
+        private int $imported,
+        private int $duplicated,
+        private int $errors,
+        private ?string $formatVersion,
+        private DateTimeImmutable $updatedAt,
     ) {
     }
 
@@ -51,7 +56,7 @@ final class ImportBatch
             }
         };
 
-        $type = $capture(static fn () => FileType::fromInput($input['tipo'] ?? null), 'tipo');
+        $type = $capture(static fn () => FileType::fromInput($input['tipo_arquivo'] ?? null), 'tipo');
         $sha = $capture(static fn () => Sha256::fromHex($input['sha256'] ?? null), 'sha256');
         $consent = $capture(static fn () => Consent::fromInput($input['consentimento'] ?? null, $now), 'consentimento');
 
@@ -85,6 +90,11 @@ final class ImportBatch
             $now->add($uploadTtl),
             ImportStatus::AguardandoUpload,
             null,
+            0,
+            0,
+            0,
+            null,
+            $now,
         );
     }
 
@@ -100,10 +110,29 @@ final class ImportBatch
         DateTimeImmutable $expiresAt,
         ImportStatus $status,
         ?string $failureReason,
+        int $imported,
+        int $duplicated,
+        int $errors,
+        ?string $formatVersion,
+        DateTimeImmutable $updatedAt,
     ): self {
         return new self(
-            $id, $athleteId, $type, $fileName, $sizeBytes, $sha256, $consent,
-            $createdAt, $expiresAt, $status, $failureReason,
+            $id,
+            $athleteId,
+            $type,
+            $fileName,
+            $sizeBytes,
+            $sha256,
+            $consent,
+            $createdAt,
+            $expiresAt,
+            $status,
+            $failureReason,
+            $imported,
+            $duplicated,
+            $errors,
+            $formatVersion,
+            $updatedAt,
         );
     }
 
@@ -122,17 +151,79 @@ final class ImportBatch
         return $this->status === ImportStatus::AguardandoUpload && $now < $this->expiresAt;
     }
 
-    public function markReceived(DateTimeImmutable $now): void
+    public function imported(): int
     {
-        $this->transition(ImportStatus::Recebido);
-        $this->events[] = new ImportacaoRecebida($this->id, $now);
+        return $this->imported;
     }
 
-    public function fail(string $reason, DateTimeImmutable $now): void
+    public function duplicated(): int
     {
-        $this->transition(ImportStatus::Falhou);
+        return $this->duplicated;
+    }
+
+    public function errors(): int
+    {
+        return $this->errors;
+    }
+
+    public function formatVersion(): ?string
+    {
+        return $this->formatVersion;
+    }
+
+    public function updatedAt(): DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function isFinished(): bool
+    {
+        return in_array($this->status, [ImportStatus::Concluido, ImportStatus::Falhou], true);
+    }
+
+    public function markReceived(DateTimeImmutable $now, string $bucket, string $objectKey): void
+    {
+        $this->requireStatus([ImportStatus::AguardandoUpload], ImportStatus::Recebido);
+        $this->status = ImportStatus::Recebido;
+        $this->updatedAt = $now;
+        $this->events[] = new ImportacaoRecebida(
+            $this->id,
+            $this->athleteId,
+            $this->type,
+            $bucket,
+            $objectKey,
+            $this->sizeBytes,
+            $this->sha256,
+            $now,
+        );
+    }
+
+    /** Falha detectada pela própria API (sha256 divergente): publica ImportacaoFalhou. */
+    public function reject(FailureCode $code, string $reason, DateTimeImmutable $now): void
+    {
+        $this->requireStatus([ImportStatus::AguardandoUpload], ImportStatus::Falhou);
+        $this->status = ImportStatus::Falhou;
         $this->failureReason = $reason;
-        $this->events[] = new ImportacaoFalhou($this->id, $reason, $now);
+        $this->updatedAt = $now;
+        $this->events[] = new ImportacaoFalhou($this->id, $this->athleteId, $code, $reason, $now);
+    }
+
+    /** Resultado do worker (ImportacaoConcluida): só atualiza o lote, sem novo evento. */
+    public function complete(int $imported, int $duplicated, int $errors, ?string $formatVersion, DateTimeImmutable $now): void
+    {
+        $this->requireStatus([ImportStatus::Recebido, ImportStatus::Processando], ImportStatus::Concluido);
+        $this->status = ImportStatus::Concluido;
+        [$this->imported, $this->duplicated, $this->errors, $this->formatVersion] = [$imported, $duplicated, $errors, $formatVersion];
+        $this->updatedAt = $now;
+    }
+
+    /** Resultado do worker (ImportacaoFalhou): só atualiza o lote, sem novo evento. */
+    public function recordWorkerFailure(string $reason, DateTimeImmutable $now): void
+    {
+        $this->requireStatus([ImportStatus::Recebido, ImportStatus::Processando], ImportStatus::Falhou);
+        $this->status = ImportStatus::Falhou;
+        $this->failureReason = $reason;
+        $this->updatedAt = $now;
     }
 
     /** @return list<DomainEvent> */
@@ -144,11 +235,11 @@ final class ImportBatch
         return $events;
     }
 
-    private function transition(ImportStatus $to): void
+    /** @param list<ImportStatus> $allowed */
+    private function requireStatus(array $allowed, ImportStatus $to): void
     {
-        if ($this->status !== ImportStatus::AguardandoUpload) {
+        if (!in_array($this->status, $allowed, true)) {
             throw InvalidTransition::from($this->status, $to);
         }
-        $this->status = $to;
     }
 }

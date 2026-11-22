@@ -1,0 +1,21 @@
+name: Funcionalidade
+description: Proposta de nova funcionalidade ou melhoria
+labels: [enhancement]
+body:
+  - type: textarea
+    id: objetivo
+    attributes:
+      label: Objetivo
+    validations:
+      required: true
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Critérios de aceite
+      description: Em Gherkin (Dado / Quando / Então) quando possível.
+    validations:
+      required: true
+  - type: textarea
+    id: notas
+    attributes:
+      label: Alternativas e notas

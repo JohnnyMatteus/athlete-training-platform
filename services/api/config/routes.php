@@ -12,5 +12,5 @@ Router::addGroup('/imports', static function (): void {
     Router::get('/{id}', [ImportController::class, 'show']);
 }, ['middleware' => [JwtAuthMiddleware::class]]);
 
-Router::post('/hooks/tusd', [TusdHookController::class, 'handle']);
+Router::post('/hooks/tus', [TusdHookController::class, 'handle']);
 Router::get('/health', static fn () => ['status' => 'ok']);

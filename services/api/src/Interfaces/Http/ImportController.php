@@ -29,7 +29,9 @@ final class ImportController
         $body = $this->request->getParsedBody();
         $result = ($this->createImport)($this->athlete(), is_array($body) ? $body : []);
 
-        return $this->response->json($result)->withStatus(201);
+        return $this->response->json($result)
+            ->withStatus(201)
+            ->withHeader('Location', '/imports/' . $result['import_id']);
     }
 
     public function show(string $id): Psr7Response

@@ -18,7 +18,11 @@ final class ProblemExceptionHandler extends ExceptionHandler
     public function handle(Throwable $throwable, ResponseInterface $response): ResponseInterface
     {
         [$status, $title, $extra] = match (true) {
-            $throwable instanceof ValidationFailed => [422, 'Dados inválidos', ['errors' => $throwable->errors]],
+            $throwable instanceof ValidationFailed => [422, 'Dados inválidos', ['errors' => array_map(
+                static fn (string $field, string $message): array => ['campo' => $field, 'mensagem' => $message],
+                array_keys($throwable->errors),
+                $throwable->errors,
+            )]],
             $throwable instanceof Unauthenticated => [401, 'Não autenticado', []],
             $throwable instanceof NotFound => [404, 'Não encontrado', []],
             default => [500, 'Erro interno', []],
@@ -29,7 +33,7 @@ final class ProblemExceptionHandler extends ExceptionHandler
         return $response
             ->withStatus($status)
             ->withHeader('Content-Type', 'application/problem+json')
-            ->withBody(new SwooleStream(json_encode(['title' => $title, 'status' => $status] + $extra, JSON_THROW_ON_ERROR)));
+            ->withBody(new SwooleStream(json_encode(['type' => 'about:blank', 'title' => $title, 'status' => $status] + $extra, JSON_THROW_ON_ERROR)));
     }
 
     public function isValid(Throwable $throwable): bool

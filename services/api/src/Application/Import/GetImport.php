@@ -24,13 +24,18 @@ final readonly class GetImport
 
         return [
             'import_id' => $batch->id->value,
-            'status' => $batch->status()->value,
-            'tipo' => $batch->type->value,
             'nome_arquivo' => $batch->fileName,
             'tamanho_bytes' => $batch->sizeBytes,
+            'tipo_arquivo' => $batch->type->value,
+            'sha256' => $batch->sha256->hex,
+            'status' => $batch->status()->value,
+            'versao_formato' => $batch->formatVersion(),
+            'importadas' => $batch->imported(),
+            'duplicadas' => $batch->duplicated(),
+            'erros' => $batch->errors(),
             'motivo_falha' => $batch->failureReason(),
             'criado_em' => $batch->createdAt->format(DATE_ATOM),
-            'expira_em' => $batch->expiresAt->format(DATE_ATOM),
+            'atualizado_em' => $batch->updatedAt()->format(DATE_ATOM),
         ];
     }
 }

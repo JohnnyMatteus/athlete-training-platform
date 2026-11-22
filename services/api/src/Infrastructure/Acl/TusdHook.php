@@ -15,7 +15,8 @@ final readonly class TusdHook
         public string $type,
         public ?string $importId,
         public int $size,
-        public ?string $storageKey,
+        public ?string $uploadId,
+        public ?string $bucket,
         public ?string $bearerToken,
     ) {
     }
@@ -36,13 +37,15 @@ final readonly class TusdHook
         $auth = $headers['Authorization'][0] ?? null;
         $token = is_string($auth) && preg_match('/^Bearer\s+(\S+)$/i', $auth, $m) === 1 ? $m[1] : null;
 
-        $key = is_array($upload['Storage'] ?? null) ? ($upload['Storage']['Key'] ?? null) : null;
+        $bucket = is_array($upload['Storage'] ?? null) ? ($upload['Storage']['Bucket'] ?? null) : null;
+        $id = $upload['ID'] ?? null;
 
         return new self(
             $type,
             isset($meta['import_id']) && is_string($meta['import_id']) ? $meta['import_id'] : null,
             (int) ($upload['Size'] ?? 0),
-            is_string($key) ? $key : null,
+            is_string($id) ? $id : null,
+            is_string($bucket) ? $bucket : null,
             $token,
         );
     }

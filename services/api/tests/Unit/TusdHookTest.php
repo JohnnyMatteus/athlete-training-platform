@@ -28,7 +28,8 @@ final class TusdHookTest extends TestCase
         self::assertSame('post-finish', $hook->type);
         self::assertSame('x-1', $hook->importId);
         self::assertSame(42, $hook->size);
-        self::assertSame('abc', $hook->storageKey);
+        self::assertSame('abc', $hook->uploadId);
+        self::assertSame('imports', $hook->bucket);
         self::assertSame('tok.en.sig', $hook->bearerToken);
     }
 
@@ -37,7 +38,8 @@ final class TusdHookTest extends TestCase
         $hook = TusdHook::fromArray(['Type' => 'pre-create', 'Event' => ['Upload' => ['Size' => 1]]]);
 
         self::assertNull($hook->importId);
-        self::assertNull($hook->storageKey);
+        self::assertNull($hook->uploadId);
+        self::assertNull($hook->bucket);
         self::assertNull($hook->bearerToken);
     }
 

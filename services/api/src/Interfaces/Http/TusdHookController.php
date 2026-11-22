@@ -15,7 +15,7 @@ use Hyperf\HttpServer\Contract\ResponseInterface;
 use Psr\Http\Message\ResponseInterface as Psr7Response;
 use Throwable;
 
-/** Endpoint dos hooks HTTP do tusd (rede interna; autenticado por segredo compartilhado). */
+/** Endpoint dos hooks HTTP do tusd (rede interna; segredo compartilhado opcional em ?token=). */
 final class TusdHookController
 {
     public function __construct(
@@ -30,7 +30,7 @@ final class TusdHookController
 
     public function handle(): Psr7Response
     {
-        if (!hash_equals($this->hookSecret, (string) $this->request->query('token', ''))) {
+        if ($this->hookSecret !== '' && !hash_equals($this->hookSecret, (string) $this->request->query('token', ''))) {
             return $this->response->json(['error' => 'forbidden'])->withStatus(403);
         }
 
@@ -67,10 +67,10 @@ final class TusdHookController
 
     private function postFinish(TusdHook $hook): Psr7Response
     {
-        if ($hook->importId === null || $hook->storageKey === null) {
+        if ($hook->importId === null || $hook->uploadId === null || $hook->bucket === null) {
             return $this->response->json(['error' => 'metadata incompleta'])->withStatus(422);
         }
-        ($this->confirmUpload)(new ImportId($hook->importId), $hook->storageKey);
+        ($this->confirmUpload)(new ImportId($hook->importId), $hook->bucket, $hook->uploadId);
 
         return $this->response->json([]);
     }

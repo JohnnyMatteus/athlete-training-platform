@@ -12,7 +12,7 @@ use Firebase\JWT\Key;
 use Throwable;
 
 /**
- * ACL do provedor de identidade (ADR 0009): valida o JWT e traduz a claim "sub" em AthleteId.
+ * ACL do provedor de identidade (ADR 0011): valida o JWT e traduz a claim "sub" em AthleteId.
  * Nenhuma classe da biblioteca de JWT atravessa a porta.
  */
 final readonly class JwtAuthenticator implements Authenticator

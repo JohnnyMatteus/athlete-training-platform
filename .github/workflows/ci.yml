@@ -1,0 +1,153 @@
+# O nome do workflow precisa ser exatamente "CI": o promote.yml escuta esse nome.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, "feat/**"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      ingest: ${{ steps.filter.outputs.ingest }}
+      contracts: ${{ steps.filter.outputs.contracts }}
+      infra: ${{ steps.filter.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            api:
+              - 'services/api/**'
+              - 'contracts/**'
+            ingest:
+              - 'services/ingest/**'
+              - 'contracts/**'
+            contracts:
+              - 'contracts/**'
+            infra:
+              - 'infra/**'
+              - 'docker-compose.yml'
+              - '.env.example'
+              - '.github/workflows/ci.yml'
+
+  api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Serviço presente?
+        id: has
+        run: '[ -f services/api/composer.json ] && echo "present=true" >> "$GITHUB_OUTPUT" || true'
+      - if: steps.has.outputs.present == 'true'
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.3"
+          extensions: swoole, pdo_pgsql, bcmath
+          tools: composer
+      - if: steps.has.outputs.present == 'true'
+        working-directory: services/api
+        run: |
+          composer install --no-interaction --prefer-dist
+          composer lint
+          composer test
+          if composer run-script --list | grep -q 'test:integration'; then composer test:integration; fi
+
+  ingest:
+    needs: changes
+    if: needs.changes.outputs.ingest == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Serviço presente?
+        id: has
+        run: '[ -f services/ingest/go.mod ] && echo "present=true" >> "$GITHUB_OUTPUT" || true'
+      - if: steps.has.outputs.present == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: services/ingest/go.mod
+          cache-dependency-path: services/ingest/go.sum
+      - if: steps.has.outputs.present == 'true'
+        working-directory: services/ingest
+        run: go vet ./...
+      - if: steps.has.outputs.present == 'true'
+        uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: services/ingest
+      - if: steps.has.outputs.present == 'true'
+        working-directory: services/ingest
+        run: |
+          go test -race ./...
+          go test -tags=integration ./...
+          go build ./...
+
+  contracts:
+    needs: changes
+    if: needs.changes.outputs.contracts == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: pip install check-jsonschema==0.30.0
+      - name: Esquemas e exemplos
+        run: |
+          check-jsonschema --check-metaschema contracts/events/importacao/*.schema.json
+          for n in importacao-recebida treino-importado importacao-concluida importacao-falhou; do
+            check-jsonschema --schemafile contracts/events/importacao/$n.v1.schema.json \
+              contracts/events/importacao/examples/$n.v1.json
+          done
+      - run: npx --yes @redocly/cli@1.34.5 lint contracts/openapi/imports.yaml
+      - run: npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
+
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        env:
+          POSTGRES_USER: atp
+          POSTGRES_PASSWORD: dev-only-change-me
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U atp"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose --profile core --profile tools --env-file .env.example config -q
+      - name: Migrações (up, esquema, down, up)
+        env:
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+        run: ./infra/scripts/test-migrations.sh
+
+  # Job agregador: é o que a proteção de branch e o Promote enxergam.
+  ci:
+    name: ci-ok
+    if: always()
+    needs: [changes, api, ingest, contracts, infra]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Falha se algum job falhou ou foi cancelado
+        run: |
+          echo '${{ toJSON(needs) }}'
+          if echo '${{ join(needs.*.result, ' ') }}' | grep -Eq 'failure|cancelled'; then exit 1; fi
+

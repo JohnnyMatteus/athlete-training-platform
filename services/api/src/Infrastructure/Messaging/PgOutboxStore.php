@@ -12,17 +12,18 @@ final class PgOutboxStore implements OutboxStore
     {
         return Db::table('outbox')
             ->whereNull('enviado_em')
-            ->orderBy('criado_em')->orderBy('id')
+            ->orderBy('id')
             ->limit($limit)
-            ->get(['id', 'tipo', 'payload'])
+            ->get(['id', 'event_id', 'routing_key', 'payload'])
             ->map(static fn (object $r): array => [
-                'id' => (string) $r->id,
-                'tipo' => (string) $r->tipo,
+                'id' => (int) $r->id,
+                'event_id' => (string) $r->event_id,
+                'routing_key' => (string) $r->routing_key,
                 'payload' => is_string($r->payload) ? $r->payload : json_encode($r->payload, JSON_THROW_ON_ERROR),
             ])->all();
     }
 
-    public function markSent(string $id): void
+    public function markSent(int $id): void
     {
         Db::table('outbox')->where('id', $id)->update(['enviado_em' => Db::raw('now()')]);
     }

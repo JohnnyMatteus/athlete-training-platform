@@ -48,7 +48,8 @@ final class UploadFlowTest extends TestCase
     {
         (new ConfirmUpload($this->batches, new FakeChecksum($actualSha), $this->outbox, new PassThroughTransaction(), $this->clock))(
             $this->id,
-            'objeto-tus',
+            'uploads',
+            'tus-upload-id',
         );
     }
 
@@ -59,7 +60,8 @@ final class UploadFlowTest extends TestCase
         self::assertSame(ImportStatus::Recebido, $this->batches->find($this->id)->status());
         self::assertCount(1, $this->outbox->events);
         self::assertInstanceOf(ImportacaoRecebida::class, $this->outbox->events[0]);
-        self::assertSame(['import_id' => $this->id->value], $this->outbox->events[0]->payload());
+        self::assertSame('tus-upload-id', $this->outbox->events[0]->data()['object_key']);
+        self::assertSame('uploads', $this->outbox->events[0]->data()['bucket']);
     }
 
     public function testChecksumMismatchFailsBatchAndPublishesOnlyFailure(): void

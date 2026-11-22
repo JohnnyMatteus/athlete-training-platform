@@ -10,10 +10,14 @@ interface DomainEvent
 {
     public function name(): string;
 
+    public function routingKey(): string;
+
     public function version(): int;
+
+    public function aggregateId(): string;
 
     public function occurredAt(): DateTimeImmutable;
 
-    /** @return array<string, mixed> campos de negócio (sem o envelope) */
-    public function payload(): array;
+    /** @return array<string, mixed> campo "dados" do contrato */
+    public function data(): array;
 }

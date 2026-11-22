@@ -25,7 +25,7 @@ final readonly class CreateImport
 
     /**
      * @param array<string, mixed> $input corpo do POST /imports
-     * @return array{import_id: string, upload_url: string, upload_metadata: array<string, string>, expira_em: string}
+     * @return array{import_id: string, status: string, upload_url: string, upload_metadata: array<string, string>, expira_em: string}
      */
     public function __invoke(AthleteId $athlete, array $input): array
     {
@@ -41,6 +41,7 @@ final readonly class CreateImport
 
         return [
             'import_id' => $batch->id->value,
+            'status' => $batch->status()->value,
             'upload_url' => $this->tusEndpoint,
             'upload_metadata' => ['import_id' => $batch->id->value],
             'expira_em' => $batch->expiresAt->format(DATE_ATOM),

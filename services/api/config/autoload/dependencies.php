@@ -26,7 +26,9 @@ use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
 
 return [
-    ImportBatchRepository::class => PgImportBatchRepository::class,
+    ImportBatchRepository::class => static fn () => new PgImportBatchRepository(
+        new DateInterval((string) env('IMPORT_UPLOAD_TTL', 'PT24H')),
+    ),
     EventOutbox::class => PgEventOutbox::class,
     OutboxStore::class => PgOutboxStore::class,
     Transaction::class => HyperfTransaction::class,
@@ -39,7 +41,7 @@ return [
         ),
         env('RABBITMQ_EXCHANGE', 'importacao'),
     ),
-    ClockInterface::class => static fn () => new class implements ClockInterface {
+    ClockInterface::class => static fn () => new class () implements ClockInterface {
         public function now(): DateTimeImmutable
         {
             return new DateTimeImmutable();
@@ -56,9 +58,8 @@ return [
             'region' => env('S3_REGION', 'us-east-1'),
             'endpoint' => env('S3_ENDPOINT'),
             'use_path_style_endpoint' => true,
-            'credentials' => ['key' => env('S3_KEY'), 'secret' => env('S3_SECRET')],
+            'credentials' => ['key' => env('S3_KEY', env('MINIO_ROOT_USER')), 'secret' => env('S3_SECRET', env('MINIO_ROOT_PASSWORD'))],
         ]),
-        (string) env('S3_BUCKET', 'imports'),
     ),
     CreateImport::class => static fn (ContainerInterface $c) => new CreateImport(
         $c->get(ImportBatchRepository::class),
@@ -73,6 +74,6 @@ return [
         $c->get(AuthorizeUpload::class),
         $c->get(ConfirmUpload::class),
         $c->get(Authenticator::class),
-        (string) env('TUSD_HOOK_SECRET'),
+        (string) env('TUSD_HOOK_SECRET', ''),
     ),
 ];
