@@ -21,11 +21,11 @@ func TestSamplesFollowsCursorAndSendsServiceToken(t *testing.T) {
 		require.Equal(t, "/internal/atividades/"+id.String()+"/amostras", r.URL.Path)
 		calls++
 		if r.URL.Query().Get("cursor") == "" {
-			fmt.Fprint(w, `{"amostras":[{"ts":"2026-03-01T07:00:00Z","fc_bpm":120,"potencia_w":200}],"proximo_cursor":"c1"}`)
+			_, _ = fmt.Fprint(w, `{"amostras":[{"ts":"2026-03-01T07:00:00Z","fc_bpm":120,"potencia_w":200}],"proximo_cursor":"c1"}`)
 			return
 		}
 		require.Equal(t, "c1", r.URL.Query().Get("cursor"))
-		fmt.Fprint(w, `{"amostras":[{"ts":"2026-03-01T07:00:01Z","velocidade":3.5}],"proximo_cursor":null}`)
+		_, _ = fmt.Fprint(w, `{"amostras":[{"ts":"2026-03-01T07:00:01Z","velocidade":3.5}],"proximo_cursor":null}`)
 	}))
 	defer srv.Close()
 
@@ -53,7 +53,7 @@ func TestSamplesDecodesContractExample(t *testing.T) {
 			_, _ = w.Write(raw)
 			return
 		}
-		fmt.Fprint(w, `{"amostras":[],"proximo_cursor":null}`)
+		_, _ = fmt.Fprint(w, `{"amostras":[],"proximo_cursor":null}`)
 	}))
 	defer srv.Close()
 
