@@ -61,7 +61,7 @@ make down      # para (make clean também remove os volumes)
 | tusd | http://localhost:8080/files/ | |
 | Postgres | `localhost:5432` (bancos `importacao`, `atividades`) | `atp` / `dev-only-change-me` |
 
-Portas e senhas ficam em `.env` (ignorado pelo Git). A API roda no host na porta 9501 e o `tusd` chama o hook em `TUSD_HOOK_URL`.
+Portas e senhas ficam em `.env` (ignorado pelo Git). A API (porta 9501) e o worker de ingestão sobem no compose (profile `core`); o `tusd` chama o hook em `http://api:9501/hooks/tus`, encaminhando o `Authorization`.
 
 ## Como testar
 

@@ -88,7 +88,8 @@ services:
       - -base-path=/files/
       - -s3-bucket=${UPLOADS_BUCKET:-uploads}
       - -s3-endpoint=http://minio:9000
-      - -hooks-http=${TUSD_HOOK_URL}
+      - -hooks-http=http://api:9501/hooks/tus
+      - -hooks-http-forward-headers=Authorization
       - -hooks-enabled-events=pre-create,post-finish
     environment:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
@@ -103,6 +104,69 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
+    networks: [atp]
+
+  # API de importação. Valida o JWT com a chave pública em services/api/runtime/jwt_public.pem.
+  api:
+    build: ./services/api
+    profiles: [core]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      HTTP_PORT: 9501
+      DB_HOST: postgres
+      DB_DATABASE: importacao
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+      S3_ENDPOINT: http://minio:9000
+      S3_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET: ${MINIO_ROOT_PASSWORD}
+      TUS_PUBLIC_URL: http://localhost:${TUSD_PORT:-8080}/files/
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "${HTTP_PORT:-9501}:9501"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:9501/health') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [atp]
+
+  # Worker de ingestão: consome ImportacaoRecebida e roda o relay da outbox do banco atividades.
+  # Imagem distroless sem shell: não há healthcheck por comando; o worker não expõe HTTP.
+  ingest:
+    build: ./services/ingest
+    profiles: [core]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      INGEST_DATABASE_URL: ${INGEST_DATABASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      INGEST_MAX_ATTEMPTS: ${INGEST_MAX_ATTEMPTS:-3}
+      INGEST_COPY_BATCH: ${INGEST_COPY_BATCH:-5000}
+    restart: unless-stopped
     networks: [atp]
 
   # Aplica as migrações de cada contexto (golang-migrate). Uso: make migrate
