@@ -42,6 +42,14 @@ public class WorkoutKitPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// `WorkoutPlan.openInWorkoutApp()` existe só no watchOS (no iOS o compilador o marca como indisponível).
+    /// No iOS 17 o caminho da Apple é a prévia do WorkoutKit (modificador SwiftUI `workoutPreview`), que não foi
+    /// implementada: sem Xcode nem aparelho não há como confirmar a API. Rejeitar explicitamente, nunca resolver sem
+    /// ter feito nada: o app captura a rejeição e cai no `exportFit` (watchSync.openOrExport).
+    @objc func openInWorkoutApp(_ call: CAPPluginCall) {
+        call.reject("openInWorkoutApp não está disponível no iOS; use exportFit.", "UNIMPLEMENTED")
+    }
+
     #if canImport(WorkoutKit)
     private func components(_ local: String) -> DateComponents? {
         // YYYY-MM-DDTHH:mm
@@ -107,16 +115,6 @@ public class WorkoutKitPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    @objc func openInWorkoutApp(_ call: CAPPluginCall) {
-        guard #available(iOS 17.0, *) else { return call.unavailable("Requer iOS 17.") }
-        Task {
-            do {
-                try await WorkoutKitMapper.plan(from: try blueprint(call.getObject("plan"))).openInWorkoutApp()
-                call.resolve()
-            } catch { call.reject("Falha ao abrir no app Workout: \(error)") }
-        }
-    }
-
     /// Reconcilia o agendado com a fila do backend (janela deslizante, ADR 0034).
     @objc func syncWindow(_ call: CAPPluginCall) {
         guard #available(iOS 17.0, *) else { return call.unavailable("Requer iOS 17.") }
@@ -161,7 +159,6 @@ public class WorkoutKitPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func listScheduled(_ call: CAPPluginCall) { call.unavailable("WorkoutKit indisponível nesta plataforma.") }
     @objc func remove(_ call: CAPPluginCall) { call.unavailable("WorkoutKit indisponível nesta plataforma.") }
     @objc func removeAll(_ call: CAPPluginCall) { call.unavailable("WorkoutKit indisponível nesta plataforma.") }
-    @objc func openInWorkoutApp(_ call: CAPPluginCall) { call.unavailable("WorkoutKit indisponível nesta plataforma.") }
     @objc func syncWindow(_ call: CAPPluginCall) { call.unavailable("WorkoutKit indisponível nesta plataforma.") }
     #endif
 }

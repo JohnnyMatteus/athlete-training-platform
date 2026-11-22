@@ -12,7 +12,7 @@ O plano do servidor usa alvos em % do limiar; o WorkoutKit precisa de valores ab
 
 - O app traduz `Workout` do plano em `PlannedWorkoutDTO` (SI) com os limiares e o perfil vigentes (`toPlannedWorkout.ts`). Sem limiar, ou com RPE, o passo fica sem alvo (mesma regra do export .fit do servidor). Só plano `ativo` vai ao relógio.
 - O plugin ganha `syncWindow` (extensão da API do design doc): reconcilia o agendado com a fila, dentro de ±7 dias e do máximo, sem reagendar o que já está certo. O id do `WorkoutPlan` é o UUID do treino, então reagendar é idempotente.
-- Fallback: `openInWorkoutApp()`; se falhar, `exportFit` gera o .fit no aparelho (também existe `GET /treinos/{id}/export.fit` no servidor).
+- Fallback: `openInWorkoutApp()` não existe no iOS (é do watchOS), então o plugin a rejeita sempre e o app cai direto em `exportFit`, que gera o .fit no aparelho; a prévia do WorkoutKit (`workoutPreview`) fica como evolução, não exercitada em aparelho (também existe `GET /treinos/{id}/export.fit` no servidor).
 - Horário padrão do treino: 07:00 local, pois o contrato só tem a data.
 
 ## Premissas que o autor confirma
