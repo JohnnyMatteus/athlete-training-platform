@@ -5,12 +5,13 @@ export const STANDARD_HEALTH_RESPONSE =
   "Procure um médico ou fisioterapeuta antes de seguir com a intensidade planejada. " +
   "Nenhuma alteração foi feita no seu plano.";
 
+// A trailing "*" marks a stem; everything else must match a whole word ("fever" must not catch "fevereiro").
 const TERMS = [
-  "dor", "dores", "doi", "doem", "doendo", "dolorid", "machuc", "lesao", "lesoes", "lesionei", "lesionad",
-  "fratura", "tendinite", "torcao", "torci", "inchaco", "inchad", "contratura", "distensao", "rompi", "rupt",
-  "tontura", "tonto", "desmai", "palpitac", "arritmia", "falta de ar", "formigamento", "dormencia",
-  "enjoo", "nausea", "febre", "sintoma", "mal estar", "caimbra", "caibra", "pontada", "sangr",
-  "pain", "painful", "injur", "hurt", "hurts", "sprain", "strain", "dizzy", "faint", "nausea", "fever", "symptom",
+  "dor", "dores", "doi", "doem", "doendo", "dolorid*", "machuc*", "lesao", "lesoes", "lesionei", "lesionad*",
+  "fratura*", "tendinite*", "torcao", "torci", "inchaco", "inchad*", "contratura*", "distensao", "rompi", "ruptura*",
+  "tontura*", "tonto", "tonta", "desmai*", "palpitac*", "arritmia*", "falta de ar", "formigamento", "dormencia",
+  "enjoo", "nausea*", "febre", "sintoma*", "mal estar", "caimbra*", "caibra*", "pontada*", "sangr*",
+  "pain", "painful", "injur*", "hurt", "hurts", "sprain*", "strain", "dizzy", "faint", "fever", "symptom*",
   "chest tight", "numb", "tingling", "swollen",
 ];
 const NEGATORS = new Set(["sem", "nenhuma", "nenhum", "no", "without", "not", "nao", "nunca", "never"]);
@@ -32,7 +33,8 @@ export function mentionsHealthIssue(text: string): boolean {
     const termWords = term.split(" ").length;
     for (let i = 0; i < words.length; i++) {
       const w = words[i] ?? "";
-      const hit = termWords === 1 ? w === term || (term.length >= 5 && w.startsWith(term)) : w === first && words.slice(i, i + termWords).join(" ") === term;
+      const stem = term.endsWith("*");
+      const hit = termWords === 1 ? (stem ? w.startsWith(term.slice(0, -1)) : w === term) : w === first && words.slice(i, i + termWords).join(" ") === term;
       if (!hit) continue;
       // "sem dor" and "no pain" do not count; "sem dor, mas meu joelho doi" still does through "doi".
       const prev = words[i - 1] ?? "";

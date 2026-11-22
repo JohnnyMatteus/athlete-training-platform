@@ -32,6 +32,7 @@ export const basePlan = (): Plan => ({
 export class FakeData implements AthleteDataPort {
   calls: Array<{ method: string; token: string; athleteId: string }> = [];
   plan: Plan = basePlan();
+  tsb = -14;
   activities: Activities = { items: [{ id: "9c1a7f4e-2b3d-4a55-8f0e-0d6b1c2a3e44", day: "2026-11-20", type: "corrida", method: "rtss", tss: 60 }] };
   link: CoachLink = { coach_id: null, status: "none", consent: { view_data: false, approve_plans: false } };
   private rec(method: string, s: Subject) {
@@ -43,7 +44,7 @@ export class FakeData implements AthleteDataPort {
   }
   async getLoadHistory(s: Subject): Promise<LoadHistory> {
     this.rec("load", s);
-    return { items: [{ day: "2026-11-20", tss: 62, ctl: 41, atl: 55, tsb: -14 }] };
+    return { items: [{ day: "2026-11-20", tss: 62, ctl: 41, atl: 55, tsb: this.tsb }] };
   }
   async getRecentActivities(s: Subject): Promise<Activities> {
     this.rec("activities", s);
@@ -88,14 +89,18 @@ export class ScriptedLlm implements LlmPort {
 export const NOW = new Date("2026-11-22T12:00:00Z");
 export const graphConfig: GraphConfig = { maxLlmCalls: 3, maxOutputTokens: 400, includeImportedText: false, loadDays: 28 };
 
-export async function makeEnv(opts: { replies?: Array<string | object>; budget?: number; graph?: Partial<GraphConfig> } = {}) {
+export async function makeEnv(
+  opts: { replies?: Array<string | object>; budget?: number; graph?: Partial<GraphConfig>; validator?: PlanValidatorPort; llm?: LlmPort } = {},
+) {
   const redis = new RedisMock() as unknown as Redis;
   await redis.flushall();
   const clock = { now: () => NOW };
   const data = new FakeData();
-  const validator = new FakeValidator();
+  const fakeValidator = new FakeValidator();
+  const validator = opts.validator ?? fakeValidator;
   const applier = new FakeApplier();
-  const llm = new ScriptedLlm(opts.replies ?? []);
+  const scripted = new ScriptedLlm(opts.replies ?? []);
+  const llm = opts.llm ?? scripted;
   const proposals = new RedisProposalStore(redis, 3600);
   const service = new CoachService({
     data, validator, proposals, llm, clock,
@@ -104,5 +109,5 @@ export async function makeEnv(opts: { replies?: Array<string | object>; budget?:
     proposalTtlHours: 48,
   });
   const approvals = new ApprovalService({ data, validator, applier, proposals, clock });
-  return { redis, data, validator, applier, llm, proposals, service, approvals, clock };
+  return { redis, data, validator: fakeValidator, applier, llm: scripted, proposals, service, approvals, clock };
 }

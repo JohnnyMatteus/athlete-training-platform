@@ -6,7 +6,7 @@ export interface Authenticator {
   authenticate(authorizationHeader: string | undefined): Promise<Principal | null>;
 }
 
-/** Same contract as the API (ADR 0011): RS256, iss, aud, exp, sub as UUID. The role comes from the `roles` claim (ADR 0024). */
+/** Same contract as the API (ADR 0011): RS256, iss, aud, exp, sub as UUID. The role comes from the `roles` claim (ADR 0014); a token with both roles acts as the athlete. */
 export class JwtAuthenticator implements Authenticator {
   private key: Promise<CryptoKey> | undefined;
   constructor(private readonly opts: { publicKeyFile: string; issuer: string; audience: string }) {}
@@ -24,8 +24,11 @@ export class JwtAuthenticator implements Authenticator {
       });
       const sub = String(payload.sub);
       if (!/^[0-9a-f-]{36}$/i.test(sub)) return null;
-      const roles = Array.isArray(payload.roles) ? payload.roles : [];
-      const role: Role = roles.includes("coach") && !roles.includes("athlete") ? "coach" : "athlete";
+      // ADR 0014: `roles` lists atleta/treinador/admin; absent means atleta. Admin never reads health data.
+      const roles: unknown[] = Array.isArray(payload.roles) ? payload.roles : ["atleta"];
+      const isAthlete = roles.includes("atleta");
+      if (!isAthlete && !roles.includes("treinador")) return null;
+      const role: Role = isAthlete ? "athlete" : "coach";
       return { subject: sub, role, token };
     } catch {
       return null;

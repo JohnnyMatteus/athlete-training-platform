@@ -12,11 +12,11 @@ describe("health guard", () => {
     "I think I have an injury",
     "tive tontura ontem",
     "LESÃO na panturrilha",
-    "sem dor, mas meu joelho dói",
+    "sem dor, mas meu joelho dói", "estou com febre", "meu joelho está inchado",
     "não sei, dor no joelho",
   ])("flags %s", (t) => expect(mentionsHealthIssue(t)).toBe(true));
 
-  it.each(["perdi dois treinos essa semana", "estou cansado, quero reduzir a semana", "sem dor nenhuma, só cansaço", "no pain today"])(
+  it.each(["perdi dois treinos essa semana", "estou cansado, quero reduzir a semana", "sem dor nenhuma, só cansaço", "no pain today", "prova em fevereiro", "treino de força para a prova de 10 km"])(
     "lets %s through",
     (t) => expect(mentionsHealthIssue(t)).toBe(false),
   );

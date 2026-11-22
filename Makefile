@@ -33,11 +33,13 @@ lint: ## Lint dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer lint); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go vet ./... && golangci-lint run); fi
 	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go vet ./... && golangci-lint run); fi
+	@if [ -f services/coach/package.json ]; then (cd services/coach && npm run lint); fi
 
 test: ## Testes unitários dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go test ./...); fi
 	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go test ./...); fi
+	@if [ -f services/coach/package.json ]; then (cd services/coach && npm test && npm run test:evals); fi
 
 test-integration: ## Testes de integração (Testcontainers; exigem Docker)
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test:integration); fi
@@ -52,7 +54,7 @@ contracts-check: ## Valida esquemas, exemplos e OpenAPI/AsyncAPI
 	uvx check-jsonschema==0.30.0 --schemafile contracts/events/atividades/atividade-corrigida.v1.schema.json contracts/events/atividades/examples/atividade-corrigida.v1.json
 	for n in metricas/metricas-calculadas metricas/limiar-atualizado planejamento/plano-gerado planejamento/treino-planejado planejamento/plano-ajustado atleta/vinculo-consentido atleta/vinculo-revogado; do \
 	  uvx check-jsonschema==0.30.0 --schemafile contracts/events/$$n.v1.schema.json contracts/events/$$(dirname $$n)/examples/$$(basename $$n).v1.json; done
-	for f in imports planejamento metricas atividades; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$$f.yaml; done
+	for f in imports planejamento metricas atividades coach-ports; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$$f.yaml; done
 	npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
 
 clean: ## Remove containers e volumes

@@ -10,7 +10,7 @@ export class ToolError extends Error {
 
 /** Talks to the coach MCP server in-process through a linked transport pair, the same protocol an external client uses. */
 export class McpToolClient {
-  private constructor(private readonly client: Client, private readonly server: McpServer) {}
+  private constructor(readonly client: Client, private readonly server: McpServer) {}
 
   static async connect(server: McpServer): Promise<McpToolClient> {
     const [a, b] = InMemoryTransport.createLinkedPair();

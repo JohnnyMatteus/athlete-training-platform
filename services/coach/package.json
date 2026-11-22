@@ -11,8 +11,7 @@
     "start": "node dist/main.js",
     "lint": "eslint . && tsc --noEmit",
     "test": "vitest run --exclude 'evals/**'",
-    "test:evals": "vitest run evals",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:evals": "vitest run evals"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.12.0",
