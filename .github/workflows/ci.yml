@@ -20,6 +20,7 @@ jobs:
       api: ${{ steps.filter.outputs.api }}
       ingest: ${{ steps.filter.outputs.ingest }}
       metrics: ${{ steps.filter.outputs.metrics }}
+      coach: ${{ steps.filter.outputs.coach }}
       contracts: ${{ steps.filter.outputs.contracts }}
       app: ${{ steps.filter.outputs.app }}
       plugin: ${{ steps.filter.outputs.plugin }}
@@ -39,6 +40,9 @@ jobs:
             metrics:
               - 'services/metrics/**'
               - 'contracts/**'
+            coach:
+              - 'services/coach/**'
+              - 'contracts/openapi/**'
             contracts:
               - 'contracts/**'
             app:
@@ -125,6 +129,26 @@ jobs:
           go test -tags=integration ./...
           go build ./...
 
+  coach:
+    needs: changes
+    if: needs.changes.outputs.coach == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/coach/package-lock.json
+      - working-directory: services/coach
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run test:evals
+          npm run build
+          npm audit --omit=dev --audit-level=high
+
   contracts:
     needs: changes
     if: needs.changes.outputs.contracts == 'true'
@@ -153,7 +177,7 @@ jobs:
               contracts/events/importacao/examples/$n.v1.json
           done
       - run: |
-          for f in imports planejamento metricas atividades; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$f.yaml; done
+          for f in imports planejamento metricas atividades coach-ports; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$f.yaml; done
       - run: npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
 
   infra:
@@ -173,7 +197,7 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose --profile core --profile tools --env-file .env.example config -q
+      - run: docker compose --profile core --profile tools --profile coach --env-file .env.example config -q
       - name: Migrações (up, esquema, down, up)
         env:
           PGHOST: 127.0.0.1
@@ -219,7 +243,7 @@ jobs:
   ci:
     name: ci-ok
     if: always()
-    needs: [changes, api, ingest, metrics, contracts, infra, app, plugin-swift]
+    needs: [changes, api, ingest, metrics, coach, contracts, infra, app, plugin-swift]
     runs-on: ubuntu-latest
     steps:
       - name: Falha se algum job falhou ou foi cancelado

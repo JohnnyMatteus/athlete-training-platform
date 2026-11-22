@@ -3,7 +3,8 @@ import { createHttp } from '@/api/http';
 import { createImportsApi } from '@/api/imports';
 import { createMetricasApi } from '@/api/metricas';
 import { createPlanejamentoApi } from '@/api/planejamento';
-import { createCoachApi, createHealthIngestApi } from '@/api/proposed';
+import { createCoachApi } from '@/api/coach';
+import { createHealthIngestApi } from '@/api/proposed';
 import { env } from '@/config/env';
 import { CapgoHealthSource } from '@/features/health/capgoHealthSource';
 import { AnchorStore, HealthIngestSink, HealthSyncService } from '@/features/health/syncService';
@@ -33,11 +34,12 @@ export function createServices() {
     importHistory,
     imports: new ImportService(
       createImportsApi(importsHttp),
-      new TusUploader(),
+      new TusUploader([env.VITE_TUS_URL]),
       consent,
       importHistory,
       new PendingUploads(kv),
       () => tokenStore.get(),
+      [env.VITE_TUS_URL],
     ),
     metricas: createMetricasApi(http(env.VITE_METRICAS_URL)),
     planejamento: createPlanejamentoApi(http(env.VITE_PLANEJAMENTO_URL)),

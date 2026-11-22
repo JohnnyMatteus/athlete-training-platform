@@ -3,10 +3,11 @@ import { ConsentRepository } from '@/features/session/consent';
 import { ConsentRequiredError, ImportHistory, ImportService, PendingUploads, UnsupportedFileError, fileTypeOf } from '@/features/imports/importService';
 import { sha256Hex } from '@/features/imports/sha256';
 import type { ResumableUploader } from '@/features/imports/tusUploader';
+import { UntrustedUploadOriginError, isTrustedUploadUrl } from '@/features/imports/uploadOrigin';
 import { MemoryStore } from '@/platform/kv';
 
 const ID = '3c1d2e4f-0b1a-4c2d-8e3f-9a8b7c6d5e40';
-const created = { import_id: ID, status: 'aguardando_upload', upload_url: 'http://tus.test/files/', upload_metadata: { import_id: ID } };
+const created = { import_id: ID, status: 'aguardando_upload', upload_url: 'https://tus.test/files/', upload_metadata: { import_id: ID } };
 
 function setup(status = 'aguardando_upload') {
   const kv = new MemoryStore();
@@ -17,7 +18,7 @@ function setup(status = 'aguardando_upload') {
   };
   const start = vi.fn().mockResolvedValue({ resumed: false, done: new Promise<void>(() => undefined), abort: async () => undefined });
   const uploader: ResumableUploader = { start };
-  const svc = new ImportService(api as never, uploader, consent, new ImportHistory(kv), new PendingUploads(kv), async () => 'tok');
+  const svc = new ImportService(api as never, uploader, consent, new ImportHistory(kv), new PendingUploads(kv), async () => 'tok', ['https://tus.test']);
   return { kv, consent, api, start, svc };
 }
 const file = () => new File(['abc'], 'export.zip', { lastModified: 1 });
@@ -25,6 +26,25 @@ const file = () => new File(['abc'], 'export.zip', { lastModified: 1 });
 describe('sha256 incremental', () => {
   it('bate com o vetor conhecido de "abc"', async () => {
     expect(await sha256Hex(file())).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+  });
+});
+
+describe('origem do upload', () => {
+  it('recusa upload_url de outra origem antes de qualquer envio', async () => {
+    const { svc, api, start, consent } = setup();
+    await consent.accept(['treinos']);
+    api.create.mockResolvedValue({ ...created, upload_url: 'https://evil.test/files/' });
+    await expect(svc.start(file(), () => undefined)).rejects.toBeInstanceOf(UntrustedUploadOriginError);
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('http só em localhost; https em qualquer origem configurada', () => {
+    const allowed = ['https://tus.test', 'http://localhost:8080', 'http://tus.test'];
+    expect(isTrustedUploadUrl('http://localhost:8080/files/x', allowed)).toBe(true);
+    expect(isTrustedUploadUrl('https://tus.test/files/x', allowed)).toBe(true);
+    expect(isTrustedUploadUrl('http://tus.test/files/x', allowed)).toBe(false);
+    expect(isTrustedUploadUrl('https://tus.test.evil.com/x', allowed)).toBe(false);
+    expect(isTrustedUploadUrl('nao-e-url', allowed)).toBe(false);
   });
 });
 

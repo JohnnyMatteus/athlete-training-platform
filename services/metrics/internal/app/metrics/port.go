@@ -3,6 +3,7 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,9 @@ const (
 	RoutingKeyCalculated = "metricas.calculadas"
 	EventCalculated      = "MetricasCalculadas"
 )
+
+// ErrActivityGone: a atividade não existe na origem das amostras; reentregar não resolve.
+var ErrActivityGone = errors.New("atividade inexistente na origem das amostras")
 
 // SampleSource lê as amostras de uma atividade (ver ADR 0012 sobre a origem dos dados).
 type SampleSource interface {

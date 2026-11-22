@@ -6,7 +6,9 @@ const schema = z.object({
   VITE_PLANEJAMENTO_URL: z.url().default('http://localhost:8120'),
   VITE_METRICAS_URL: z.url().default('http://localhost:8121'),
   VITE_ATIVIDADES_URL: z.url().default('http://localhost:8122'),
-  VITE_COACH_URL: z.url().default('http://localhost:8123'),
+  VITE_COACH_URL: z.url().default('http://localhost:8130'),
+  // Única origem para onde o JWT segue no upload tus (hooks do tusd, ADR 0010).
+  VITE_TUS_URL: z.url().default('http://localhost:8080'),
 });
 
 export const env = schema.parse(import.meta.env);

@@ -5,8 +5,10 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly problem: Problem | null,
+    // Corpo `{ error, message }` do coach, que não usa problem+json.
+    readonly detail: string | null = null,
   ) {
-    super(problem?.title ?? `HTTP ${status}`);
+    super(problem?.title ?? detail ?? `HTTP ${status}`);
   }
 }
 
@@ -74,8 +76,10 @@ export function createHttp(deps: HttpDeps) {
     if (res.status === 401) deps.onUnauthorized?.();
     if (opts.proposed && ABSENT.has(res.status)) throw new EndpointUnavailableError(path);
     if (!res.ok) {
-      const parsed = problemSchema.safeParse(await res.json().catch(() => null));
-      throw new ApiError(res.status, parsed.success ? parsed.data : null);
+      const body: unknown = await res.json().catch(() => null);
+      const parsed = problemSchema.safeParse(body);
+      const msg = (body as { message?: unknown } | null)?.message;
+      throw new ApiError(res.status, parsed.success ? parsed.data : null, typeof msg === 'string' ? msg : null);
     }
 
     const parsed = opts.schema.safeParse(await res.json());

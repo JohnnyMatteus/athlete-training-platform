@@ -135,6 +135,8 @@ type calculatedData struct {
 	CTL               float64   `json:"ctl"`
 	ATL               float64   `json:"atl"`
 	TSB               float64   `json:"tsb"`
+	Day               string    `json:"dia"`
+	ActivityType      string    `json:"tipo_atividade"`
 }
 
 // publish grava MetricasCalculadas no outbox. O id é derivado do evento de entrada, então a reentrega gera o mesmo id.
@@ -145,7 +147,7 @@ func (s *Service) publish(ctx context.Context, tx Tx, e ActivityEvent, res load.
 		AthleteID: e.AthleteID, ActivityID: e.ActivityID, Method: string(res.Method), TSS: res.TSS,
 		DiscardedHR: res.Discards.HR, DiscardedPower: res.Discards.Power,
 		RecalculatedFrom: rows[0].Day.String(), RecalculatedUntil: last.Day.String(),
-		CTL: last.CTL, ATL: last.ATL, TSB: last.TSB,
+		CTL: last.CTL, ATL: last.ATL, TSB: last.TSB, Day: res.Day.String(), ActivityType: e.Type,
 	}
 	if res.NP > 0 {
 		data.NP = &res.NP

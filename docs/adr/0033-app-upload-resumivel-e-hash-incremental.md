@@ -12,6 +12,8 @@
 - O contrato não lista lotes; o app guarda os ids dos próprios envios e consulta cada um.
 - Consentimento obrigatório antes de criar o lote; o payload sai do `ConsentRepository`.
 
+- O token só vai para origens configuradas (`VITE_TUS_URL`): `upload_url` é validada antes de iniciar o tus e cada requisição (inclusive URL retomada ou Location) é conferida em `onBeforeRequest`. Fora de localhost exige https.
+
 ## Consequências
 
 - O texto jurídico do termo é do autor; o do app é provisório (versão `2026-11`).

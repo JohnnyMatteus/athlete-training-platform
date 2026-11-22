@@ -11,14 +11,19 @@ import (
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
+	"github.com/JohnnyMatteus/athlete-training-platform/services/metrics/internal/app/athlete"
 	"github.com/JohnnyMatteus/athlete-training-platform/services/metrics/internal/app/metrics"
+	"github.com/JohnnyMatteus/athlete-training-platform/services/metrics/internal/telemetry"
 )
 
 // Filas definidas em infra/rabbitmq/definitions.json.
 const (
 	QueueImported  = "metrics.treino-importado"
 	QueueCorrected = "metrics.atividade-corrigida"
+	QueueLinks     = "metrics.vinculo"
 )
 
 // ErrInvalidMessage marca mensagem que nunca será processável (vai para a DLQ).
@@ -122,15 +127,67 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 func (c *Consumer) dispatch(ctx context.Context, d amqp.Delivery) {
+	ctx = telemetry.WithTraceparent(ctx, headerString(d.Headers, "traceparent"))
+	ctx, span := otel.Tracer("metrics").Start(ctx, c.queue+" process", trace.WithSpanKind(trace.SpanKindConsumer))
+	defer span.End()
 	err := c.handler(ctx, d.Body)
+	if err != nil {
+		span.RecordError(err)
+	}
 	switch {
 	case err == nil:
 		_ = d.Ack(false)
-	case errors.Is(err, ErrInvalidMessage):
+	case errors.Is(err, ErrInvalidMessage), errors.Is(err, metrics.ErrActivityGone):
 		c.log.ErrorContext(ctx, "mensagem descartada", "fila", c.queue, "erro", err)
 		_ = d.Nack(false, false) // sem requeue: cai em importacao.dlq
 	default:
 		c.log.ErrorContext(ctx, "falha ao processar, devolvendo à fila", "fila", c.queue, "erro", err)
 		_ = d.Nack(false, true)
+	}
+}
+
+func headerString(h amqp.Table, key string) string {
+	if v, ok := h[key].(string); ok {
+		return v
+	}
+	return ""
+}
+
+type linkEnvelope struct {
+	EventID    uuid.UUID `json:"event_id"`
+	Type       string    `json:"tipo"`
+	Version    int       `json:"versao"`
+	OccurredAt time.Time `json:"ocorrido_em"`
+	Data       struct {
+		LinkID     uuid.UUID `json:"vinculo_id"`
+		AthleteID  uuid.UUID `json:"atleta_id"`
+		CoachID    uuid.UUID `json:"treinador_id"`
+		Categories []string  `json:"categorias"`
+	} `json:"dados"`
+}
+
+// DecodeLink valida VinculoTreinadorConsentido e VinculoTreinadorRevogado.
+func DecodeLink(body []byte) (uuid.UUID, athlete.Link, error) {
+	var e linkEnvelope
+	if err := json.Unmarshal(body, &e); err != nil {
+		return uuid.Nil, athlete.Link{}, fmt.Errorf("%w: %v", ErrInvalidMessage, err)
+	}
+	d := e.Data
+	consented := e.Type == "VinculoTreinadorConsentido"
+	if (!consented && e.Type != "VinculoTreinadorRevogado") || e.Version != 1 || e.EventID == uuid.Nil || e.OccurredAt.IsZero() ||
+		d.LinkID == uuid.Nil || d.AthleteID == uuid.Nil || d.CoachID == uuid.Nil || (consented && len(d.Categories) == 0) {
+		return uuid.Nil, athlete.Link{}, fmt.Errorf("%w: evento de vínculo com campos obrigatórios ausentes", ErrInvalidMessage)
+	}
+	return e.EventID, athlete.Link{ID: d.LinkID, AthleteID: d.AthleteID, CoachID: d.CoachID, Categories: d.Categories, Active: consented, At: e.OccurredAt.UTC()}, nil
+}
+
+// Links liga os eventos de vínculo ao read model de autorização.
+func Links(s *athlete.Service) Handler {
+	return func(ctx context.Context, body []byte) error {
+		id, l, err := DecodeLink(body)
+		if err != nil {
+			return err
+		}
+		return s.OnLink(ctx, id, l)
 	}
 }

@@ -170,6 +170,37 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /planos/{plano_id}/ajustes/validacao:
+    parameters:
+      - {$ref: '#/components/parameters/PlanoId'}
+    post:
+      tags: [planos]
+      operationId: validateAdjustment
+      summary: Valida um ajuste sem aplicar (somente leitura)
+      description: |
+        Mesmo corpo, mesma resposta e mesma autorização de `POST /planos/{plano_id}/ajustes`, mas só
+        roda o validador: não grava nada, não cria versão, não escreve na outbox e não publica evento.
+        A resposta nunca traz `plano`. É a rota que o Coach IA usa para propor (ADR 0005); para aplicar,
+        quem decide chama `/ajustes`. Rota separada de propósito, sem flag na rota de escrita.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdjustmentRequest'}
+      responses:
+        '200':
+          description: Resultado da validação (`aceito` diz se `/ajustes` aceitaria agora)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdjustmentResult'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          description: Proposta malformada
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /planos/{plano_id}/aderencia:
     parameters:
       - {$ref: '#/components/parameters/PlanoId'}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/app/port"
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/domain/activity"
+	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/telemetry"
 )
 
 // Store é o UnitOfWork.
@@ -219,8 +220,9 @@ func (t *txn) Enqueue(ctx context.Context, events ...port.Event) error {
 			return err
 		}
 		if _, err := t.tx.Exec(ctx, `
-			INSERT INTO outbox (event_id, aggregate_id, routing_key, tipo, versao, payload) VALUES ($1, $2, $3, $4, 1, $5)`,
-			e.ID, e.ImportID, e.RoutingKey, e.Type, payload); err != nil {
+			INSERT INTO outbox (event_id, aggregate_id, routing_key, tipo, versao, payload, traceparent)
+			VALUES ($1, $2, $3, $4, 1, $5, NULLIF($6, ''))`,
+			e.ID, e.ImportID, e.RoutingKey, e.Type, payload, telemetry.Traceparent(ctx)); err != nil {
 			return err
 		}
 	}

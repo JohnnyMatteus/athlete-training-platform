@@ -10,8 +10,11 @@ import (
 
 	"github.com/google/uuid"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/app/port"
+	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/telemetry"
 )
 
 // Queue é a fila definida em infra/rabbitmq/definitions.json.
@@ -98,6 +101,9 @@ func (c *Consumer) Run(ctx context.Context) error {
 }
 
 func (c *Consumer) dispatch(ctx context.Context, d amqp.Delivery) {
+	ctx = telemetry.WithTraceparent(ctx, headerString(d.Headers, "traceparent"))
+	ctx, span := otel.Tracer("ingest").Start(ctx, "ImportacaoRecebida process", trace.WithSpanKind(trace.SpanKindConsumer))
+	defer span.End()
 	count, _ := d.Headers["x-delivery-count"].(int64) // quorum queues
 	msg, err := Decode(d.Body, count)
 	if err != nil {
@@ -106,8 +112,16 @@ func (c *Consumer) dispatch(ctx context.Context, d amqp.Delivery) {
 		return
 	}
 	if err := c.handler.Handle(ctx, msg); err != nil {
+		span.RecordError(err)
 		_ = d.Nack(false, true)
 		return
 	}
 	_ = d.Ack(false)
+}
+
+func headerString(h amqp.Table, key string) string {
+	if v, ok := h[key].(string); ok {
+		return v
+	}
+	return ""
 }

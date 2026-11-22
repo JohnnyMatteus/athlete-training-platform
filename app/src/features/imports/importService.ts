@@ -3,6 +3,7 @@ import { fileTypeSchema, type FileType, type ImportBatch } from '@/api/schemas';
 import type { ConsentRepository } from '@/features/session/consent';
 import type { KeyValueStore } from '@/platform/kv';
 import { sha256Hex } from './sha256';
+import { assertTrustedUploadUrl } from './uploadOrigin';
 import type { ResumableUploader, UploadHandle } from './tusUploader';
 
 export class ConsentRequiredError extends Error {
@@ -87,6 +88,7 @@ export class ImportService {
     private readonly history: ImportHistory,
     private readonly pending: PendingUploads,
     private readonly token: () => Promise<string | null>,
+    private readonly allowedUploadOrigins: readonly string[],
   ) {}
 
   async start(file: File, onProgress: (p: ImportProgress) => void): Promise<{ importId: string; handle: UploadHandle }> {
@@ -113,6 +115,8 @@ export class ImportService {
       await this.history.add(target.import_id);
     }
     const created = target;
+    // Antes de qualquer envio: a URL do upload vem do servidor, não é confiável por si só.
+    assertTrustedUploadUrl(created.upload_url, this.allowedUploadOrigins);
 
     const handle = await this.uploader.start({
       file,

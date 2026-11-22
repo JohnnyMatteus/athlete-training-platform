@@ -30,10 +30,14 @@ func NewPublisher(conn *amqp.Connection) (*Publisher, error) {
 	return &Publisher{ch: ch}, nil
 }
 
-func (p *Publisher) Publish(ctx context.Context, routingKey string, messageID uuid.UUID, eventType string, body []byte) error {
+func (p *Publisher) Publish(ctx context.Context, routingKey string, messageID uuid.UUID, eventType, traceparent string, body []byte) error {
+	var headers amqp.Table
+	if traceparent != "" {
+		headers = amqp.Table{"traceparent": traceparent}
+	}
 	conf, err := p.ch.PublishWithDeferredConfirmWithContext(ctx, Exchange, routingKey, true, false, amqp.Publishing{
 		ContentType: "application/json", DeliveryMode: amqp.Persistent,
-		MessageId: messageID.String(), Type: eventType, Timestamp: time.Now().UTC(), Body: body,
+		Headers: headers, MessageId: messageID.String(), Type: eventType, Timestamp: time.Now().UTC(), Body: body,
 	})
 	if err != nil {
 		return err

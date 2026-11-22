@@ -1,4 +1,5 @@
 import * as tus from 'tus-js-client';
+import { assertTrustedUploadUrl, isTrustedUploadUrl } from './uploadOrigin';
 
 export interface UploadRequest {
   file: Blob & { name?: string };
@@ -21,7 +22,10 @@ export interface ResumableUploader {
 }
 
 export class TusUploader implements ResumableUploader {
+  constructor(private readonly allowedOrigins: readonly string[]) {}
+
   async start(req: UploadRequest): Promise<UploadHandle> {
+    assertTrustedUploadUrl(req.endpoint, this.allowedOrigins);
     let resolve!: () => void;
     let reject!: (e: Error) => void;
     const done = new Promise<void>((res, rej) => {
@@ -37,7 +41,9 @@ export class TusUploader implements ResumableUploader {
       storeFingerprintForResuming: true,
       removeFingerprintOnSuccess: true,
       // O token é lido a cada requisição: um JWT renovado durante um upload longo vale na hora.
+      // Inclui a URL retomada do armazenamento e o Location devolvido pelo servidor: cada requisição é conferida.
       onBeforeRequest: async (r) => {
+        if (!isTrustedUploadUrl(r.getURL(), this.allowedOrigins)) throw new Error(`origem de upload não confiável: ${r.getURL()}`);
         const t = await req.token();
         if (t) r.setHeader('Authorization', `Bearer ${t}`);
       },
