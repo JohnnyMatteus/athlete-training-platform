@@ -1,0 +1,15 @@
+{
+  "event_id": "5d4c3b2a-1f0e-4d9c-8b7a-6f5e4d3c2b1a",
+  "tipo": "AtividadeCorrigida",
+  "versao": 1,
+  "ocorrido_em": "2026-03-05T09:00:00Z",
+  "dados": {
+    "atleta_id": "2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01",
+    "atividade_id": "7a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+    "tipo": "corrida",
+    "inicio_utc": "2026-03-01T07:30:00Z",
+    "duracao_s": 3600,
+    "distancia_m": 10250.5,
+    "inicio_utc_anterior": "2026-02-28T23:30:00Z"
+  }
+}

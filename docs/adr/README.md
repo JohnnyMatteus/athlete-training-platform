@@ -15,5 +15,6 @@ Decisões iniciais do [design doc](../design-doc.md) (seção 13), no formato de
 | [0009](0009-contratos-versionados-e-um-banco-por-contexto.md) | (implementação) | Contratos versionados em `contracts/` e um banco por contexto | sim |
 | [0010](0010-tusd-separado-com-backend-s3.md) | (implementação) | Servidor tus separado (tusd) com backend S3/MinIO | sim |
 | [0011](0011-autenticacao-jwt-do-atleta.md) | (implementação) | Autenticação do atleta com JWT (RS256) validado pela API; provedor fora do M1 | sim |
+| [0012](0012-banco-metricas-dono-de-carga-diaria.md) | (implementação) | Banco `metricas` é dono de `carga_diaria`; leitura de amostras por adaptador somente leitura | não (M2) |
 
 Onde o design doc não registra alternativas, o ADR diz isso explicitamente em vez de inventar; o autor completa antes de aceitar.

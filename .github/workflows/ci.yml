@@ -19,6 +19,7 @@ jobs:
     outputs:
       api: ${{ steps.filter.outputs.api }}
       ingest: ${{ steps.filter.outputs.ingest }}
+      metrics: ${{ steps.filter.outputs.metrics }}
       contracts: ${{ steps.filter.outputs.contracts }}
       infra: ${{ steps.filter.outputs.infra }}
     steps:
@@ -32,6 +33,9 @@ jobs:
               - 'contracts/**'
             ingest:
               - 'services/ingest/**'
+              - 'contracts/**'
+            metrics:
+              - 'services/metrics/**'
               - 'contracts/**'
             contracts:
               - 'contracts/**'
@@ -63,6 +67,27 @@ jobs:
           composer lint
           composer test
           if composer run-script --list | grep -q 'test:integration'; then composer test:integration; fi
+
+  metrics:
+    needs: changes
+    if: needs.changes.outputs.metrics == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/metrics/go.mod
+          cache-dependency-path: services/metrics/go.sum
+      - working-directory: services/metrics
+        run: go vet ./...
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          working-directory: services/metrics
+      - working-directory: services/metrics
+        run: |
+          go test -race ./...
+          go test -tags=integration ./...
+          go build ./...
 
   ingest:
     needs: changes
@@ -107,7 +132,11 @@ jobs:
       - run: pip install check-jsonschema==0.30.0
       - name: Esquemas e exemplos
         run: |
-          check-jsonschema --check-metaschema contracts/events/importacao/*.schema.json
+          check-jsonschema --check-metaschema contracts/events/*/*.schema.json
+          check-jsonschema --schemafile contracts/events/atividades/atividade-corrigida.v1.schema.json \
+            contracts/events/atividades/examples/atividade-corrigida.v1.json
+          check-jsonschema --schemafile contracts/events/metricas/metricas-calculadas.v1.schema.json \
+            contracts/events/metricas/examples/metricas-calculadas.v1.json
           for n in importacao-recebida treino-importado importacao-concluida importacao-falhou; do
             check-jsonschema --schemafile contracts/events/importacao/$n.v1.schema.json \
               contracts/events/importacao/examples/$n.v1.json
@@ -143,7 +172,7 @@ jobs:
   ci:
     name: ci-ok
     if: always()
-    needs: [changes, api, ingest, contracts, infra]
+    needs: [changes, api, ingest, metrics, contracts, infra]
     runs-on: ubuntu-latest
     steps:
       - name: Falha se algum job falhou ou foi cancelado

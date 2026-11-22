@@ -32,19 +32,25 @@ migrate-test: ## Valida migrações (up, esquema, down, up) num Postgres descart
 lint: ## Lint dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer lint); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go vet ./... && golangci-lint run); fi
+	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go vet ./... && golangci-lint run); fi
 
 test: ## Testes unitários dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go test ./...); fi
+	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go test ./...); fi
 
 test-integration: ## Testes de integração (Testcontainers; exigem Docker)
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test:integration); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go test -tags=integration ./...); fi
+	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go test -tags=integration ./...); fi
 
 contracts-check: ## Valida esquemas, exemplos e OpenAPI/AsyncAPI
 	uvx check-jsonschema==0.30.0 --check-metaschema contracts/events/importacao/*.schema.json
 	@for n in importacao-recebida treino-importado importacao-concluida importacao-falhou; do \
 	  uvx check-jsonschema==0.30.0 --schemafile contracts/events/importacao/$$n.v1.schema.json contracts/events/importacao/examples/$$n.v1.json; done
+	uvx check-jsonschema==0.30.0 --check-metaschema contracts/events/atividades/*.schema.json contracts/events/metricas/*.schema.json
+	uvx check-jsonschema==0.30.0 --schemafile contracts/events/atividades/atividade-corrigida.v1.schema.json contracts/events/atividades/examples/atividade-corrigida.v1.json
+	uvx check-jsonschema==0.30.0 --schemafile contracts/events/metricas/metricas-calculadas.v1.schema.json contracts/events/metricas/examples/metricas-calculadas.v1.json
 	npx --yes @redocly/cli@1.34.5 lint contracts/openapi/imports.yaml
 	npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
 
