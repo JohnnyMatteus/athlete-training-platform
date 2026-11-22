@@ -1,0 +1,7 @@
+.git
+.env
+.env.*
+testdata
+tools
+**/*_test.go
+Dockerfile

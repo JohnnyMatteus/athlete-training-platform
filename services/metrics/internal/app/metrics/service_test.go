@@ -55,6 +55,8 @@ func TestImportedActivityGeneratesLoadAndEvent(t *testing.T) {
 	data := ev["dados"].(map[string]any)
 	assert.Equal(t, "tss_potencia", data["metodo"])
 	assert.Equal(t, "2026-03-01", data["recalculado_desde"])
+	assert.Equal(t, "2026-03-01", data["dia"])
+	assert.Equal(t, e.Type, data["tipo_atividade"])
 }
 
 func TestRedeliveryIsIdempotent(t *testing.T) {
