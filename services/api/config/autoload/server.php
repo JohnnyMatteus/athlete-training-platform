@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 use Hyperf\Server\Event;
 use Hyperf\Server\Server;
-use Swoole\Constant;
 
 use function Hyperf\Support\env;
+
+use Swoole\Constant;
 
 return [
     'mode' => SWOOLE_PROCESS,

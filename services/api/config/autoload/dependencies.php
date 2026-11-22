@@ -24,11 +24,12 @@ use App\Infrastructure\Persistence\S3ObjectChecksum;
 use App\Interfaces\Http\HookSecret;
 use App\Interfaces\Http\TusdHookController;
 use Aws\S3\S3Client;
+
+use function Hyperf\Support\env;
+
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use Psr\Clock\ClockInterface;
 use Psr\Container\ContainerInterface;
-
-use function Hyperf\Support\env;
 
 return [
     ImportBatchRepository::class => static fn () => new PgImportBatchRepository(

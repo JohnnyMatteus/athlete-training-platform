@@ -33,12 +33,12 @@ services:
       - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
     volumes:
       - rabbitmqdata:/var/lib/rabbitmq
-      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/90-definitions.conf:ro
+      - ./infra/rabbitmq/healthcheck.sh:/usr/local/bin/atp-healthcheck.sh:ro
       - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
     healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      test: ["CMD", "sh", "/usr/local/bin/atp-healthcheck.sh"]
       interval: 10s
-      timeout: 10s
+      timeout: 30s
       retries: 12
     networks: [atp]
 
