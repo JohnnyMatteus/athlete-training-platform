@@ -57,6 +57,7 @@ final readonly class PgImportBatchRepository implements ImportBatchRepository
                 'aceito_em' => $batch->consent->grantedAt->format(DATE_ATOM),
             ], JSON_THROW_ON_ERROR),
             'criado_em' => $batch->createdAt->format(DATE_ATOM),
+            'traceparent' => \Hyperf\Context\Context::get(\App\Infrastructure\Telemetry\Tracing::CONTEXT_KEY),
         ]);
     }
 

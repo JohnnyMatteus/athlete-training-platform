@@ -14,12 +14,13 @@ final class PgOutboxStore implements OutboxStore
             ->whereNull('enviado_em')
             ->orderBy('id')
             ->limit($limit)
-            ->get(['id', 'event_id', 'routing_key', 'payload'])
+            ->get(['id', 'event_id', 'routing_key', 'payload', 'traceparent'])
             ->map(static fn (object $r): array => [
                 'id' => (int) $r->id,
                 'event_id' => (string) $r->event_id,
                 'routing_key' => (string) $r->routing_key,
                 'payload' => is_string($r->payload) ? $r->payload : json_encode($r->payload, JSON_THROW_ON_ERROR),
+                'traceparent' => $r->traceparent === null ? null : (string) $r->traceparent,
             ])->all();
     }
 

@@ -8,8 +8,11 @@ use App\Application\Import\AuthorizeUpload;
 use App\Application\Import\ConfirmUpload;
 use App\Application\Import\UploadRejected;
 use App\Application\Port\Authenticator;
+use App\Application\Port\ImportTraceStore;
 use App\Domain\Import\ImportId;
 use App\Infrastructure\Acl\TusdHook;
+use App\Infrastructure\Telemetry\Tracing;
+use Hyperf\Context\Context;
 use Hyperf\HttpServer\Contract\RequestInterface;
 use Hyperf\HttpServer\Contract\ResponseInterface;
 use Psr\Http\Message\ResponseInterface as Psr7Response;
@@ -24,6 +27,7 @@ final class TusdHookController
         private readonly AuthorizeUpload $authorizeUpload,
         private readonly ConfirmUpload $confirmUpload,
         private readonly Authenticator $authenticator,
+        private readonly ImportTraceStore $traces,
         private readonly string $hookSecret,
     ) {
     }
@@ -70,7 +74,18 @@ final class TusdHookController
         if ($hook->importId === null || $hook->uploadId === null || $hook->bucket === null) {
             return $this->response->json(['error' => 'metadata incompleta'])->withStatus(422);
         }
-        ($this->confirmUpload)(new ImportId($hook->importId), $hook->bucket, $hook->uploadId);
+        $id = new ImportId($hook->importId);
+        // O tusd não repassa traceparent: o hook continua o trace aberto em POST /imports.
+        $span = Tracing::start('tusd post-finish', $this->traces->find($id));
+        Context::set(Tracing::CONTEXT_KEY, $span->traceparent());
+        try {
+            ($this->confirmUpload)($id, $hook->bucket, $hook->uploadId);
+        } catch (Throwable $e) {
+            $span->fail($e);
+            throw $e;
+        } finally {
+            $span->end();
+        }
 
         return $this->response->json([]);
     }

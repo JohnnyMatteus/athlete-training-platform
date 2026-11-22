@@ -129,7 +129,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    environment:
+    environment: &api-env
       HTTP_PORT: 9501
       DB_HOST: postgres
       DB_DATABASE: importacao
@@ -145,6 +145,8 @@ services:
       JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
       JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: api
     volumes:
       - ./services/api/runtime:/run/jwt:ro
     ports:
@@ -154,6 +156,39 @@ services:
       interval: 10s
       timeout: 3s
       retries: 10
+    restart: unless-stopped
+    networks: [atp]
+
+  # Workers da API sem HTTP: healthcheck por worker:health (banco, broker e atraso da outbox).
+  api-relay:
+    build: ./services/api
+    profiles: [core]
+    command: ["outbox:relay"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  api-consumer:
+    build: ./services/api
+    profiles: [core]
+    command: ["importacao:consume-results"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     restart: unless-stopped
     networks: [atp]
 

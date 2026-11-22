@@ -7,6 +7,7 @@ namespace App\Infrastructure\Messaging;
 use PhpAmqpLib\Channel\AMQPChannel;
 use PhpAmqpLib\Connection\AMQPStreamConnection;
 use PhpAmqpLib\Message\AMQPMessage;
+use PhpAmqpLib\Wire\AMQPTable;
 
 final class AmqpMessagePublisher implements MessagePublisher
 {
@@ -18,15 +19,19 @@ final class AmqpMessagePublisher implements MessagePublisher
     ) {
     }
 
-    public function publish(string $routingKey, string $payload, string $messageId): void
+    public function publish(string $routingKey, string $payload, string $messageId, ?string $traceparent = null): void
     {
         $channel = $this->channel();
+        $properties = [
+            'content_type' => 'application/json',
+            'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT,
+            'message_id' => $messageId,
+        ];
+        if ($traceparent !== null) {
+            $properties['application_headers'] = new AMQPTable(['traceparent' => $traceparent]);
+        }
         $channel->basic_publish(
-            new AMQPMessage($payload, [
-                'content_type' => 'application/json',
-                'delivery_mode' => AMQPMessage::DELIVERY_MODE_PERSISTENT,
-                'message_id' => $messageId,
-            ]),
+            new AMQPMessage($payload, $properties),
             $this->exchange,
             $routingKey,
             true,

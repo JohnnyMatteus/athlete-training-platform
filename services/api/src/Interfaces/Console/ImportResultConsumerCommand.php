@@ -8,6 +8,7 @@ use App\Application\Import\ApplyImportResult;
 use App\Application\Import\NotFound;
 use App\Domain\Import\ImportId;
 use App\Infrastructure\Acl\ImportResultMessage;
+use App\Infrastructure\Telemetry\Tracing;
 use Hyperf\Command\Annotation\Command;
 use Hyperf\Command\Command as HyperfCommand;
 
@@ -41,13 +42,19 @@ final class ImportResultConsumerCommand extends HyperfCommand
         $channel = $connection->channel();
         $channel->basic_qos(0, 10, false);
         $channel->basic_consume('api.importacao-resultado', '', false, false, false, false, function (AMQPMessage $m): void {
+            $headers = $m->has('application_headers') ? $m->get('application_headers')->getNativeData() : [];
+            $span = Tracing::start('api.importacao-resultado process', is_string($headers['traceparent'] ?? null) ? $headers['traceparent'] : null, \OpenTelemetry\API\Trace\SpanKind::KIND_CONSUMER);
             try {
                 $this->process($m->getBody());
                 $m->ack();
-            } catch (InvalidArgumentException | NotFound) {
+            } catch (InvalidArgumentException | NotFound $e) {
+                $span->fail($e);
                 $m->nack(false); // não processável: vai para a DLQ
-            } catch (Throwable) {
+            } catch (Throwable $e) {
+                $span->fail($e);
                 $m->nack(true);
+            } finally {
+                $span->end();
             }
         });
         $channel->consume();
