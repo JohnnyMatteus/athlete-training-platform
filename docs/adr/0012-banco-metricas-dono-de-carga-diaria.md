@@ -14,17 +14,15 @@ O design doc (5.2) lista `carga_diaria` junto de `atividade` e `amostra`, mas a 
 - O worker de ingestão e a API nunca escrevem nem leem o banco `metricas`; quem precisar de carga consome `MetricasCalculadas`.
 - Dia da carga é o dia UTC do início da atividade.
 
-## Exceção registrada: leitura das amostras
+## Amostras (atualizado pelo ADR 0015)
 
-`TreinoImportado` traz só o resumo da atividade, e NP, pace normalizado e descartes exigem as amostras (hypertable `amostra`, banco `atividades`). Sem endpoint nem evento com as amostras, o serviço lê `atividades.amostra` por uma porta (`SampleSource`) com um adaptador somente leitura, usando um usuário próprio de apenas `SELECT` (`ATIVIDADES_READONLY_URL`). Esta é a única leitura cruzada e vive num adaptador isolado.
-
-Quando o contexto de Atividades expuser as amostras (endpoint interno paginado ou URI de objeto no evento), troca-se o adaptador sem tocar em domínio ou caso de uso.
+A exceção original (leitura somente leitura de `atividades.amostra`) foi substituída: o contexto de Atividades expõe as amostras por um endpoint interno paginado, e o serviço de métricas as lê por um cliente HTTP atrás da porta `SampleSource`. Nenhum serviço lê o banco de outro; `ATIVIDADES_READONLY_URL` deixa de existir.
 
 ## Consequências
 
-- A fronteira de escrita fica imposta pela infraestrutura; a de leitura tem uma exceção rastreável.
-- Limiares e perfil ainda não têm origem: a API de Planejamento os alimentará (M4); até lá entram por migração, seed ou SQL. Sem limiar, a atividade cai no TRIMP ou fica `indisponivel`.
-- `AtividadeCorrigida` ainda não tem publicador: o contrato existe e o consumidor está pronto.
+- A fronteira de escrita e a de leitura ficam impostas pela infraestrutura.
+- Limiares e perfil têm origem: `PUT /metricas/limiares` e `PUT /metricas/perfil` (contrato `openapi/metricas.yaml`) gravam nas tabelas deste banco e publicam `LimiarAtualizado`. Sem limiar, a atividade cai no TRIMP ou fica `indisponivel`.
+- `AtividadeCorrigida` é publicado pelo worker de ingestão (`PATCH /atividades/{id}`, ADR 0015).
 
 ## Alternativas consideradas
 

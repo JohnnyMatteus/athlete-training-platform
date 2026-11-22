@@ -1,0 +1,110 @@
+openapi: 3.1.0
+info:
+  title: Athlete Training Platform - API de Atividades
+  version: 1.0.0
+  description: |
+    Face HTTP do contexto de Atividades, hospedada no binário do worker de ingestão (ADR 0012, ADR 0015).
+    Duas audiências:
+    - `/internal/...`: só rede interna, autenticada por token de serviço (`Authorization: Bearer <INTERNAL_API_TOKEN>`).
+      O serviço de métricas lê as amostras por aqui, sem consultar o banco `atividades`.
+    - `/atividades/{id}`: correção de atividade pelo atleta (JWT RS256, `sub` é o dono). Publica `AtividadeCorrigida`.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8122
+    description: Desenvolvimento local
+paths:
+  /internal/atividades/{atividade_id}/amostras:
+    get:
+      operationId: listSamples
+      summary: Amostras de uma atividade, paginadas por cursor
+      security: [{serviceToken: []}]
+      parameters:
+        - {name: atividade_id, in: path, required: true, schema: {type: string, format: uuid}}
+        - {name: cursor, in: query, required: false, description: 'Valor de `proximo_cursor` da página anterior.', schema: {type: string}}
+        - {name: limite, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 20000, default: 5000}}
+      responses:
+        '200':
+          description: Página em ordem crescente de `ts`; `proximo_cursor` nulo na última.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [atividade_id, atleta_id, tipo, inicio_utc, duracao_s, amostras, proximo_cursor]
+                properties:
+                  atividade_id: {type: string, format: uuid}
+                  atleta_id: {type: string, format: uuid}
+                  tipo: {type: string}
+                  inicio_utc: {type: string, format: date-time}
+                  duracao_s: {type: integer}
+                  proximo_cursor: {type: [string, 'null']}
+                  amostras:
+                    type: array
+                    items:
+                      type: object
+                      required: [ts]
+                      properties:
+                        ts: {type: string, format: date-time}
+                        fc_bpm: {type: [integer, 'null']}
+                        potencia_w: {type: [integer, 'null']}
+                        cadencia: {type: [integer, 'null']}
+                        velocidade: {type: [number, 'null'], description: m/s}
+                        altitude_m: {type: [number, 'null']}
+        '401': {description: 'Token de serviço ausente ou inválido'}
+        '404': {description: Atividade inexistente}
+  /atividades/{atividade_id}:
+    patch:
+      operationId: correctActivity
+      summary: Corrige tipo e/ou horário de início de uma atividade (só o dono)
+      description: Grava a correção e o evento `AtividadeCorrigida` na mesma transação (outbox). Se o início mudou, o evento traz `inicio_utc_anterior`. Corpo sem mudança efetiva responde 200 sem evento. Atividade de outro atleta responde 404.
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: atividade_id, in: path, required: true, schema: {type: string, format: uuid}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                tipo: {type: string, enum: [natacao_piscina, natacao_aguas_abertas, ciclismo_indoor, ciclismo_outdoor, corrida, forca, outro]}
+                inicio_utc: {type: string, format: date-time}
+      responses:
+        '200':
+          description: Atividade após a correção
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [atividade_id, tipo, inicio_utc, duracao_s, distancia_m]
+                properties:
+                  atividade_id: {type: string, format: uuid}
+                  tipo: {type: string}
+                  inicio_utc: {type: string, format: date-time}
+                  duracao_s: {type: integer}
+                  distancia_m: {type: [number, 'null']}
+        '401': {description: 'Token ausente, inválido ou expirado'}
+        '404': {description: 'Atividade inexistente ou de outro atleta'}
+        '409': {description: 'Correção colide com a chave natural de outra atividade'}
+        '422': {description: Corpo inválido}
+  /health:
+    get:
+      operationId: health
+      security: []
+      summary: Liveness (usado também pelo healthcheck do worker)
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+    serviceToken: {type: http, scheme: bearer, description: Token compartilhado entre serviços na rede interna}

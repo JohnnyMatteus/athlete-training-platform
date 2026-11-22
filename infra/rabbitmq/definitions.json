@@ -32,6 +32,24 @@
       "auto_delete": false,
       "internal": false,
       "arguments": {}
+    },
+    {
+      "name": "planejamento",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "atleta",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
     }
   ],
   "queues": [
@@ -67,6 +85,36 @@
     },
     {
       "name": "metrics.atividade-corrigida",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "planning.metricas-calculadas",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "planning.limiar-atualizado",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "metrics.vinculo",
       "vhost": "/",
       "durable": true,
       "auto_delete": false,
@@ -132,6 +180,38 @@
       "destination": "importacao.dlq",
       "destination_type": "queue",
       "routing_key": "",
+      "arguments": {}
+    },
+    {
+      "source": "metricas",
+      "vhost": "/",
+      "destination": "planning.metricas-calculadas",
+      "destination_type": "queue",
+      "routing_key": "metricas.calculadas",
+      "arguments": {}
+    },
+    {
+      "source": "metricas",
+      "vhost": "/",
+      "destination": "planning.limiar-atualizado",
+      "destination_type": "queue",
+      "routing_key": "limiar.atualizado",
+      "arguments": {}
+    },
+    {
+      "source": "atleta",
+      "vhost": "/",
+      "destination": "metrics.vinculo",
+      "destination_type": "queue",
+      "routing_key": "vinculo.consentido",
+      "arguments": {}
+    },
+    {
+      "source": "atleta",
+      "vhost": "/",
+      "destination": "metrics.vinculo",
+      "destination_type": "queue",
+      "routing_key": "vinculo.revogado",
       "arguments": {}
     }
   ]

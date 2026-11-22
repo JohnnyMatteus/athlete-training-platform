@@ -111,6 +111,24 @@
         },
         "tsb": {
           "type": "number"
+        },
+        "dia": {
+          "type": "string",
+          "format": "date",
+          "description": "Dia UTC da atividade (dia da carga). Opcional; usado pela aderência no Planejamento."
+        },
+        "tipo_atividade": {
+          "type": "string",
+          "enum": [
+            "natacao_piscina",
+            "natacao_aguas_abertas",
+            "ciclismo_indoor",
+            "ciclismo_outdoor",
+            "corrida",
+            "forca",
+            "outro"
+          ],
+          "description": "Opcional; usado para casar com o treino planejado."
         }
       }
     }

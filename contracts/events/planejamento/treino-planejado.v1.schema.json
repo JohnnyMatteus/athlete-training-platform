@@ -1,0 +1,195 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.athlete-training-platform.example/events/planejamento/treino-planejado.v1.schema.json",
+  "title": "TreinoPlanejado",
+  "description": "Um treino de um plano ativo está pronto para sincronização. Publicado uma vez por treino quando o plano fica `ativo` (aprovado, ou gerado sem modo treinador) e de novo quando um ajuste o altera. Estrutura é a fonte do PlannedWorkoutDTO do plugin.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "tipo",
+    "versao",
+    "ocorrido_em",
+    "dados"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Consumidores deduplicam por ele (entrega pelo menos uma vez)."
+    },
+    "tipo": {
+      "const": "TreinoPlanejado"
+    },
+    "versao": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível cria um arquivo .v2."
+    },
+    "ocorrido_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante UTC em que o fato ocorreu."
+    },
+    "dados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plano_id",
+        "versao_plano",
+        "atleta_id",
+        "treino_id",
+        "data",
+        "modalidade",
+        "nome",
+        "intensidade",
+        "duracao_s",
+        "tss_planejado",
+        "blocos"
+      ],
+      "properties": {
+        "plano_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "versao_plano": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "atleta_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "treino_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "data": {
+          "type": "string",
+          "format": "date"
+        },
+        "modalidade": {
+          "type": "string",
+          "enum": [
+            "natacao",
+            "ciclismo",
+            "corrida",
+            "forca"
+          ]
+        },
+        "nome": {
+          "type": "string"
+        },
+        "intensidade": {
+          "type": "string",
+          "enum": [
+            "descanso",
+            "baixa",
+            "moderada",
+            "alta"
+          ]
+        },
+        "duracao_s": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tss_planejado": {
+          "type": "number",
+          "minimum": 0
+        },
+        "blocos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "repeticoes",
+              "passos"
+            ],
+            "properties": {
+              "repeticoes": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "passos": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "tipo",
+                    "objetivo"
+                  ],
+                  "properties": {
+                    "tipo": {
+                      "type": "string",
+                      "enum": [
+                        "aquecimento",
+                        "trabalho",
+                        "recuperacao",
+                        "desaquecimento"
+                      ]
+                    },
+                    "objetivo": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "tipo"
+                      ],
+                      "properties": {
+                        "tipo": {
+                          "type": "string",
+                          "enum": [
+                            "tempo",
+                            "distancia",
+                            "aberto"
+                          ]
+                        },
+                        "valor": {
+                          "type": "number",
+                          "exclusiveMinimum": 0,
+                          "description": "Segundos (tempo) ou metros (distancia); ausente quando aberto."
+                        }
+                      }
+                    },
+                    "alvo": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "tipo",
+                        "baixo",
+                        "alto"
+                      ],
+                      "properties": {
+                        "tipo": {
+                          "type": "string",
+                          "enum": [
+                            "potencia_pct_ftp",
+                            "pace_pct_limiar",
+                            "css_pct",
+                            "fc_pct_max",
+                            "rpe"
+                          ]
+                        },
+                        "baixo": {
+                          "type": "number"
+                        },
+                        "alto": {
+                          "type": "number"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "removido": {
+          "type": "boolean",
+          "description": "true quando um ajuste removeu o treino; o consumidor apaga o agendamento."
+        }
+      }
+    }
+  }
+}
