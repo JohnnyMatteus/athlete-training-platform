@@ -1,0 +1,17 @@
+{
+  "event_id": "2c3d4e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f",
+  "tipo": "PlanoAjustado",
+  "versao": 1,
+  "ocorrido_em": "2026-11-25T08:00:00Z",
+  "dados": {
+    "plano_id": "b1c2d3e4-f5a6-4b7c-8d9e-0a1b2c3d4e5f",
+    "atleta_id": "2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01",
+    "versao_plano": 2,
+    "status": "ativo",
+    "motivo": "Perdi o treino de quinta",
+    "origem": "coach",
+    "treinos_alterados": [
+      "c3d4e5f6-a7b8-4c9d-8e0f-1a2b3c4d5e6f"
+    ]
+  }
+}

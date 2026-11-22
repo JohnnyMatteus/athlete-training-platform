@@ -2,3 +2,4 @@
 CREATE DATABASE importacao;
 CREATE DATABASE atividades;
 CREATE DATABASE metricas;
+CREATE DATABASE planejamento;

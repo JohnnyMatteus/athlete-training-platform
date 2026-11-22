@@ -1,6 +1,6 @@
 asyncapi: 3.0.0
 info:
-  title: Athlete Training Platform - Eventos de Importação
+  title: Athlete Training Platform - Eventos
   version: 1.0.0
   description: |
     Eventos do contexto de Importação no RabbitMQ (exchange `importacao`, tipo topic). Entrega pelo
@@ -39,6 +39,30 @@ channels:
     messages:
       MetricasCalculadas:
         $ref: '#/components/messages/MetricasCalculadas'
+  planoGerado:
+    address: plano.gerado
+    messages:
+      PlanoGerado: {$ref: '#/components/messages/PlanoGerado'}
+  treinoPlanejado:
+    address: treino.planejado
+    messages:
+      TreinoPlanejado: {$ref: '#/components/messages/TreinoPlanejado'}
+  planoAjustado:
+    address: plano.ajustado
+    messages:
+      PlanoAjustado: {$ref: '#/components/messages/PlanoAjustado'}
+  vinculoConsentido:
+    address: vinculo.consentido
+    messages:
+      VinculoTreinadorConsentido: {$ref: '#/components/messages/VinculoTreinadorConsentido'}
+  vinculoRevogado:
+    address: vinculo.revogado
+    messages:
+      VinculoTreinadorRevogado: {$ref: '#/components/messages/VinculoTreinadorRevogado'}
+  limiarAtualizado:
+    address: limiar.atualizado
+    messages:
+      LimiarAtualizado: {$ref: '#/components/messages/LimiarAtualizado'}
 operations:
   publishImportacaoRecebida:
     action: send
@@ -76,6 +100,46 @@ operations:
     action: send
     summary: O serviço de métricas publica na exchange `metricas` depois de gravar carga_atividade e carga_diaria.
     channel: {$ref: '#/channels/metricasCalculadas'}
+  publishLimiarAtualizado:
+    action: send
+    summary: O serviço de métricas publica na exchange `metricas` ao registrar um limiar (PUT /metricas/limiares).
+    channel: {$ref: '#/channels/limiarAtualizado'}
+  consumeLimiarAtualizado:
+    action: receive
+    summary: Planejamento consome (fila planning.limiar-atualizado) para resolver alvos absolutos e o .fit.
+    channel: {$ref: '#/channels/limiarAtualizado'}
+  consumeMetricasCalculadas:
+    action: receive
+    summary: Planejamento consome (fila planning.metricas-calculadas) para CTL/ATL atuais e TSS realizado (aderência).
+    channel: {$ref: '#/channels/metricasCalculadas'}
+  publishPlanoGerado:
+    action: send
+    summary: Planejamento publica na exchange `planejamento` ao gerar um plano válido.
+    channel: {$ref: '#/channels/planoGerado'}
+  publishTreinoPlanejado:
+    action: send
+    summary: Planejamento publica um por treino quando o plano fica ativo, e de novo quando um ajuste o altera. A sincronização (M5) consome.
+    channel: {$ref: '#/channels/treinoPlanejado'}
+  publishPlanoAjustado:
+    action: send
+    summary: Planejamento publica ao aceitar um ajuste.
+    channel: {$ref: '#/channels/planoAjustado'}
+  publishVinculoConsentido:
+    action: send
+    summary: Planejamento (hospeda o contexto Atleta, ADR 0013) publica na exchange `atleta` quando o treinador aceita o convite.
+    channel: {$ref: '#/channels/vinculoConsentido'}
+  publishVinculoRevogado:
+    action: send
+    summary: Idem, quando atleta ou treinador encerra o vínculo.
+    channel: {$ref: '#/channels/vinculoRevogado'}
+  consumeVinculoConsentido:
+    action: receive
+    summary: O serviço de métricas consome (fila metrics.vinculo) para o read model de autorização.
+    channel: {$ref: '#/channels/vinculoConsentido'}
+  consumeVinculoRevogado:
+    action: receive
+    summary: Idem.
+    channel: {$ref: '#/channels/vinculoRevogado'}
 components:
   messages:
     ImportacaoRecebida:
@@ -102,3 +166,27 @@ components:
       name: MetricasCalculadas
       payload:
         $ref: 'events/metricas/metricas-calculadas.v1.schema.json'
+    PlanoGerado:
+      name: PlanoGerado
+      payload:
+        $ref: 'events/planejamento/plano-gerado.v1.schema.json'
+    TreinoPlanejado:
+      name: TreinoPlanejado
+      payload:
+        $ref: 'events/planejamento/treino-planejado.v1.schema.json'
+    PlanoAjustado:
+      name: PlanoAjustado
+      payload:
+        $ref: 'events/planejamento/plano-ajustado.v1.schema.json'
+    VinculoTreinadorConsentido:
+      name: VinculoTreinadorConsentido
+      payload:
+        $ref: 'events/atleta/vinculo-consentido.v1.schema.json'
+    VinculoTreinadorRevogado:
+      name: VinculoTreinadorRevogado
+      payload:
+        $ref: 'events/atleta/vinculo-revogado.v1.schema.json'
+    LimiarAtualizado:
+      name: LimiarAtualizado
+      payload:
+        $ref: 'events/metricas/limiar-atualizado.v1.schema.json'

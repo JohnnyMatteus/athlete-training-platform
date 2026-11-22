@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.athlete-training-platform.example/events/metricas/limiar-atualizado.v1.schema.json",
+  "title": "LimiarAtualizado",
+  "description": "Um limiar (FTP, pace de limiar ou CSS) foi registrado ou alterado. Publicado pelo serviço de métricas; Planejamento usa para resolver alvos absolutos e o .fit.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "tipo",
+    "versao",
+    "ocorrido_em",
+    "dados"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Consumidores deduplicam por ele (entrega pelo menos uma vez)."
+    },
+    "tipo": {
+      "const": "LimiarAtualizado"
+    },
+    "versao": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível cria um arquivo .v2."
+    },
+    "ocorrido_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante UTC em que o fato ocorreu."
+    },
+    "dados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "atleta_id",
+        "tipo",
+        "valor",
+        "vigente_desde"
+      ],
+      "properties": {
+        "atleta_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "ftp",
+            "pace_limiar",
+            "css"
+          ]
+        },
+        "valor": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "ftp em W, pace_limiar em s/km, css em m/s."
+        },
+        "vigente_desde": {
+          "type": "string",
+          "format": "date"
+        }
+      }
+    }
+  }
+}

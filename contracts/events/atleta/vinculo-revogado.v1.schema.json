@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.athlete-training-platform.example/events/atleta/vinculo-revogado.v1.schema.json",
+  "title": "VinculoTreinadorRevogado",
+  "description": "O vínculo foi encerrado pelo atleta ou pelo treinador; o treinador perde o acesso imediatamente.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "tipo",
+    "versao",
+    "ocorrido_em",
+    "dados"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Consumidores deduplicam por ele (entrega pelo menos uma vez)."
+    },
+    "tipo": {
+      "const": "VinculoTreinadorRevogado"
+    },
+    "versao": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível cria um arquivo .v2."
+    },
+    "ocorrido_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante UTC em que o fato ocorreu."
+    },
+    "dados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "vinculo_id",
+        "atleta_id",
+        "treinador_id",
+        "revogado_por"
+      ],
+      "properties": {
+        "vinculo_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "atleta_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "treinador_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "revogado_por": {
+          "type": "string",
+          "enum": [
+            "atleta",
+            "treinador"
+          ]
+        }
+      }
+    }
+  }
+}
