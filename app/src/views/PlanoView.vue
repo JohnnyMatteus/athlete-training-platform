@@ -18,6 +18,23 @@ const busy = ref(false);
 
 const weeks = computed(() => cur.plan.value?.mesociclos.flatMap((m) => m.microciclos.map((c) => ({ ...c, fase: m.fase }))) ?? []);
 const canSend = computed(() => cur.plan.value?.status === 'ativo' && s.watch.supported());
+const exportable = computed(
+  () => new Map(cur.plan.value && canSend.value ? scheduleFromPlan(cur.plan.value, limits.value).map((i) => [i.id, i.plano]) : []),
+);
+
+async function exportWorkout(id: string) {
+  const plan = exportable.value.get(id);
+  if (!plan) return;
+  busy.value = true;
+  failure.value = null;
+  try {
+    await s.watch.openOrExport(plan);
+  } catch (e) {
+    failure.value = (e as Error).message;
+  } finally {
+    busy.value = false;
+  }
+}
 
 async function sendToWatch() {
   if (!cur.plan.value) return;
@@ -69,6 +86,16 @@ async function sendToWatch() {
             <ion-item v-for="t in w.treinos.filter((x) => x.intensidade !== 'descanso')" :key="t.id">
               <span><span class="num">{{ dayMonth(t.data) }}</span> {{ MODALIDADE_LABEL[t.modalidade] }}: {{ t.nome }}</span>
               <span slot="end" class="num">{{ duration(t.duracao_s) }} · {{ num0(t.tss_planejado) }}</span>
+              <ion-button
+                v-if="exportable.has(t.id)"
+                slot="end"
+                fill="clear"
+                :disabled="busy"
+                :aria-label="`Exportar .fit de ${t.nome}, ${dayMonth(t.data)}`"
+                @click="exportWorkout(t.id)"
+              >
+                .fit
+              </ion-button>
             </ion-item>
           </ion-list>
         </section>
