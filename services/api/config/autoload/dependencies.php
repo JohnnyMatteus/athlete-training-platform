@@ -61,7 +61,7 @@ return [
             'region' => env('S3_REGION', 'us-east-1'),
             'endpoint' => env('S3_ENDPOINT'),
             'use_path_style_endpoint' => true,
-            'credentials' => ['key' => env('S3_KEY', env('MINIO_ROOT_USER')), 'secret' => env('S3_SECRET', env('MINIO_ROOT_PASSWORD'))],
+            'credentials' => ['key' => env('S3_KEY', env('S3_ACCESS_KEY')), 'secret' => env('S3_SECRET', env('S3_SECRET_KEY'))],
         ]),
     ),
     CreateImport::class => static fn (ContainerInterface $c) => new CreateImport(

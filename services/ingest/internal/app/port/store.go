@@ -18,7 +18,7 @@ type Object interface {
 	io.Closer
 }
 
-// ObjectStore lê arquivos de importação (MinIO/S3).
+// ObjectStore lê arquivos de importação (S3).
 type ObjectStore interface {
 	Open(ctx context.Context, bucket, key string) (Object, error)
 }

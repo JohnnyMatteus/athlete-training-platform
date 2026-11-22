@@ -225,6 +225,56 @@ jobs:
           PGPORT: "5432"
         run: ./infra/scripts/test-migrations.sh
 
+  # Prova a troca do S3 local por LocalStack (ADR 0035) pelo compose real, sem mocks.
+  s3-localstack:
+    name: S3 local (LocalStack), upload pelo tusd e expiração
+    needs: changes
+    if: needs.changes.outputs.infra == 'true' || needs.changes.outputs.api == 'true' || needs.changes.outputs.ingest == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Chaves JWT de desenvolvimento
+        run: ./infra/scripts/dev-jwt.sh keys
+
+      # --wait só retorna com todos os healthchecks verdes; o do LocalStack só passa depois que o init-s3.sh
+      # terminou sem erro (bucket e regra de expiração criados).
+      - name: Subir S3, Postgres e RabbitMQ (--wait)
+        run: |
+          set -o pipefail
+          docker compose --profile core --env-file .env.example up -d --wait --wait-timeout 300 postgres rabbitmq localstack 2>&1 | tee "$RUNNER_TEMP/up-infra.log"
+
+      - name: Migrações
+        run: |
+          set -o pipefail
+          docker compose --profile core --profile tools --env-file .env.example run --rm migrate 2>&1 | tee "$RUNNER_TEMP/migrate.log"
+
+      - name: Subir API, tusd e worker de ingestão (--wait)
+        run: |
+          set -o pipefail
+          docker compose --profile core --env-file .env.example up -d --build --wait --wait-timeout 900 api tusd ingest 2>&1 | tee "$RUNNER_TEMP/up-app.log"
+
+      - name: Upload multipart pelo tusd até o bucket e regra de expiração
+        run: |
+          set -o pipefail
+          ./infra/scripts/e2e-s3-upload.sh 2>&1 | tee "$RUNNER_TEMP/e2e-s3.log"
+          grep -q '^OK: ' "$RUNNER_TEMP/e2e-s3.log"
+
+      # Perfil core inteiro, depois da prova do S3 para que uma falha alheia a ele não a esconda.
+      - name: Subir o perfil core inteiro (--wait)
+        run: |
+          set -o pipefail
+          docker compose --profile core --env-file .env.example up -d --build --wait --wait-timeout 1200 2>&1 | tee "$RUNNER_TEMP/up-core.log"
+
+      - name: Logs em caso de falha
+        if: failure()
+        run: docker compose --profile core --env-file .env.example logs --no-color --tail=150 localstack tusd api ingest
+
+      # Só no runner: derruba o ambiente e apaga os volumes.
+      - name: Derrubar o ambiente
+        if: always()
+        run: docker compose --profile core --profile tools --env-file .env.example down -v --remove-orphans
+
   app:
     needs: changes
     if: needs.changes.outputs.app == 'true'
@@ -264,7 +314,7 @@ jobs:
   ci:
     name: ci-ok
     if: always()
-    needs: [changes, api, planning, ingest, metrics, coach, contracts, infra, app, plugin-swift]
+    needs: [changes, api, planning, ingest, metrics, coach, contracts, infra, s3-localstack, app, plugin-swift]
     runs-on: ubuntu-latest
     steps:
       - name: Falha se algum job falhou ou foi cancelado

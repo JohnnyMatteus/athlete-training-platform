@@ -6,7 +6,7 @@ info:
     Criação e acompanhamento de importações (export.zip do app Saúde, .fit, .tcx e .gpx).
 
     O arquivo em si não passa por esta API: o cliente envia por upload resumível (protocolo tus,
-    servidor `tusd` com backend S3/MinIO) e o `tusd` avisa a API pelos hooks HTTP descritos abaixo.
+    servidor `tusd` com backend S3) e o `tusd` avisa a API pelos hooks HTTP descritos abaixo.
 
     Autenticação por JWT RS256 (`Authorization: Bearer`), validado pela API (ADR 0011). A claim `sub`
     é o `atleta_id`. Papéis (RBAC) não fazem parte do M1.

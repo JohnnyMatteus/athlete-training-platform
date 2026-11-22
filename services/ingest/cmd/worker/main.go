@@ -62,7 +62,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	endpoint, err := need("MINIO_ENDPOINT")
+	endpoint, err := need("S3_HOST")
 	if err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 			log.Warn("encerrar telemetria", "erro", err)
 		}
 	}()
-	user, pass := os.Getenv("MINIO_ROOT_USER"), os.Getenv("MINIO_ROOT_PASSWORD")
+	user, pass := os.Getenv("S3_ACCESS_KEY"), os.Getenv("S3_SECRET_KEY")
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
@@ -97,11 +97,13 @@ func run(ctx context.Context, log *slog.Logger) error {
 	}
 	defer pool.Close()
 
-	mc, err := minio.New(endpoint, &minio.Options{
-		Creds: credentials.NewStaticV4(user, pass, ""), Secure: os.Getenv("MINIO_USE_SSL") == "true",
+	// Path-style e região fixa: o LocalStack e o S3 da AWS aceitam, e não há DNS de subdomínio por bucket no compose.
+	s3, err := minio.New(endpoint, &minio.Options{
+		Creds: credentials.NewStaticV4(user, pass, ""), Secure: os.Getenv("S3_USE_SSL") == "true",
+		BucketLookup: minio.BucketLookupPath, Region: envOr("S3_REGION", "us-east-1"),
 	})
 	if err != nil {
-		return fmt.Errorf("minio: %w", err)
+		return fmt.Errorf("s3: %w", err)
 	}
 
 	conn, err := amqp.Dial(amqpURL)
@@ -119,7 +121,7 @@ func run(ctx context.Context, log *slog.Logger) error {
 		return err
 	}
 	store := postgres.NewStore(pool)
-	uc := ingest.New(objectstore.New(mc), store, map[string]port.Translator{
+	uc := ingest.New(objectstore.New(s3), store, map[string]port.Translator{
 		"zip": applehealth.Translator{}, "fit": fit.Translator{}, "gpx": gpx.Translator{}, "tcx": tcx.Translator{},
 	}, ingest.Config{
 		MaxAttempts: envInt("INGEST_MAX_ATTEMPTS", ingest.DefaultMaxAttempts),
