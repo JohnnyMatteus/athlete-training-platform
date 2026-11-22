@@ -18,8 +18,10 @@ RUN apk add --no-cache libpq libstdc++ brotli-libs \
 WORKDIR /app
 COPY --from=deps /app/vendor ./vendor
 COPY . .
+# O phpdotenv exige o arquivo; ele fica vazio e a configuração vem do ambiente do contêiner.
 RUN addgroup -S app && adduser -S -G app app \
- && mkdir -p /app/runtime && chown app:app /app/runtime
+ && mkdir -p /app/runtime && chown app:app /app/runtime \
+ && touch /app/.env
 USER app
 EXPOSE 8120
 ENTRYPOINT ["php", "bin/hyperf.php"]
