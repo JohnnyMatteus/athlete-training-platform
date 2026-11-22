@@ -8,7 +8,7 @@ Plataforma de treino inteligente para atletas amadores com Apple Watch.
 
 Quem treina triatlo acumula dados em vários lugares: o Apple Watch (app Saúde), o ciclocomputador e plataformas de treino, cada um em um formato. Transformar isso em carga de treino comparável e em treinos ajustados ao momento do atleta é trabalho manual. A plataforma importa os treinos de todas as fontes, normaliza num modelo único, calcula métricas auditáveis e envia o plano de volta ao relógio.
 
-**Estado atual (M1, Ingestão):** upload resumível do `export.zip` do app Saúde e de arquivos `.fit`, `.gpx` e `.tcx`, parser em streaming, gravação em lote e deduplicação. Métricas, app, planejamento e coach de IA vêm nos marcos seguintes ([design doc, seção 12](docs/design-doc.md)).
+**Estado atual:** ingestão (M1), métricas (M2, com API de leitura, perfil e limiares) e Planejamento (M4: motor de periodização e validador determinísticos, ajustes, aprovação do treinador, aderência, export `.fit`, vínculo atleta-treinador com RBAC). Autenticação por JWT, OpenTelemetry de ponta a ponta e retenção de 7 dias dos arquivos já estão ligados. App, plugin WorkoutKit e Coach de IA vêm nos marcos seguintes ([design doc, seção 12](docs/design-doc.md)).
 
 ## Arquitetura
 
@@ -33,9 +33,10 @@ Seis contextos delimitados integrados por eventos ([ADR 0001](docs/adr/0001-cont
 
 | Caminho | Conteúdo |
 | --- | --- |
-| `services/api` | API e Planejamento (PHP, Hyperf) |
+| `services/api` | API de importação (PHP, Hyperf) |
+| `services/planning` | Planejamento (PHP, Hyperf, M4) |
 | `services/ingest` | Worker de ingestão (Go) |
-| `services/metrics` | Métricas (Go, M2) |
+| `services/metrics` | Métricas (Go, M2) e API de leitura |
 | `services/coach` | Coach de IA (TypeScript, M6) |
 | `app/` | App Ionic + Vue + Capacitor (M3) |
 | `plugins/capacitor-workoutkit` | Plugin Swift (M5) |
@@ -48,8 +49,10 @@ Seis contextos delimitados integrados por eventos ([ADR 0001](docs/adr/0001-cont
 Requisitos: Docker com Compose v2, make. Para os serviços: PHP 8.3 + Composer + Swoole, Go (versão do `go.mod`).
 
 ```bash
-make up        # Postgres + TimescaleDB, RabbitMQ, MinIO e tusd (cria .env a partir de .env.example)
-make migrate   # aplica as migrações dos bancos importacao e atividades
+make up        # Postgres + TimescaleDB, RabbitMQ, MinIO e tusd (cria .env e o par de chaves JWT de desenvolvimento)
+make migrate   # aplica as migrações de todos os bancos
+docker compose --profile core --env-file .env up -d --build   # API, Planejamento, ingestão, métricas, workers e Jaeger
+TOKEN=$(infra/scripts/dev-jwt.sh token)                       # JWT de teste (atleta); papel: dev-jwt.sh token <uuid> treinador
 make ps        # estado e healthchecks
 make down      # para (make clean também remove os volumes)
 ```
@@ -59,9 +62,13 @@ make down      # para (make clean também remove os volumes)
 | RabbitMQ (gestão) | http://localhost:15672 | `atp` / `dev-only-change-me` |
 | MinIO (console) | http://localhost:9001 | `atp-minio` / `dev-only-change-me` |
 | tusd | http://localhost:8080/files/ | |
-| Postgres | `localhost:5432` (bancos `importacao`, `atividades`) | `atp` / `dev-only-change-me` |
+| Planejamento (API) | http://localhost:8120 | JWT de `dev-jwt.sh` |
+| Métricas (API) | http://localhost:8121 | JWT de `dev-jwt.sh` |
+| Atividades (HTTP do worker de ingestão) | http://127.0.0.1:8122 (só loopback; `/internal/**` nunca por proxy público) | token de serviço e JWT |
+| Jaeger (traces) | http://localhost:8123 | |
+| Postgres | `localhost:5432` (bancos `importacao`, `atividades`, `metricas`, `planejamento`) | `atp` / `dev-only-change-me` |
 
-Portas e senhas ficam em `.env` (ignorado pelo Git). A API (porta 9501) e o worker de ingestão sobem no compose (profile `core`); o `tusd` chama o hook em `http://api:9501/hooks/tus`, encaminhando o `Authorization`.
+Portas e senhas ficam em `.env` (ignorado pelo Git). Os serviços sobem no compose (profile `core`); o `tusd` chama o hook em `http://api:9501/hooks/tus`, encaminhando o `Authorization`. Arquivos de importação expiram em `UPLOADS_RETENTION_DAYS` (padrão 7) por regra de ciclo de vida do bucket ([ADR 0019](docs/adr/0019-retencao-de-arquivos-por-ciclo-de-vida-do-bucket.md)). O compose não foi exercitado de ponta a ponta neste repositório sem Docker local: só `docker compose config` e os testes unitários rodaram fora do CI.
 
 ## Como testar
 
@@ -77,8 +84,8 @@ O CI (`.github/workflows/ci.yml`, workflow `CI`) roda um job por serviço, só q
 
 ## Contratos
 
-- Eventos: [`contracts/events/importacao`](contracts/events/importacao) (`ImportacaoRecebida`, `TreinoImportado`, `ImportacaoConcluida`, `ImportacaoFalhou`).
-- HTTP: [`contracts/openapi/imports.yaml`](contracts/openapi/imports.yaml).
+- Eventos: [`contracts/events`](contracts/events) (Importação, Atividades, Métricas, Planejamento e vínculo do treinador).
+- HTTP: [`imports`](contracts/openapi/imports.yaml), [`planejamento`](contracts/openapi/planejamento.yaml), [`metricas`](contracts/openapi/metricas.yaml) e [`atividades`](contracts/openapi/atividades.yaml).
 - Topologia e versionamento: [`contracts/README.md`](contracts/README.md).
 
 ## Decisões principais
@@ -93,6 +100,7 @@ O CI (`.github/workflows/ci.yml`, workflow `CI`) roda um job por serviço, só q
 | [0008](docs/adr/0008-dados-de-saude-sensiveis-lgpd.md) | Dados de saúde sensíveis (LGPD) |
 | [0009](docs/adr/0009-contratos-versionados-e-um-banco-por-contexto.md) | Contratos versionados e um banco por contexto |
 | [0010](docs/adr/0010-tusd-separado-com-backend-s3.md) | tusd separado com backend S3 |
+| [0013](docs/adr/0013-servico-de-planejamento-hyperf.md) a [0019](docs/adr/0019-retencao-de-arquivos-por-ciclo-de-vida-do-bucket.md) | Serviço de Planejamento, RBAC com vínculo consentido, amostras por HTTP interno, motor e validador, aderência, OpenTelemetry e retenção |
 
 ## Trade-offs
 
@@ -102,7 +110,11 @@ O CI (`.github/workflows/ci.yml`, workflow `CI`) roda um job por serviço, só q
 
 ## Próximos passos
 
-M2 Métricas, M3 App e HealthKit, M4 Planejamento, M5 plugin WorkoutKit, M6 Coach de IA ([plano de entrega](docs/design-doc.md)). Pendentes de decisão: autenticação e RBAC, retenção de 7 dias dos arquivos, OpenTelemetry fim a fim ([issues, pontos em aberto](docs/issues/README.md)).
+- M3 App e HealthKit, M5 plugin WorkoutKit (consome `TreinoPlanejado`) e M6 Coach de IA ([plano de entrega](docs/design-doc.md)).
+- Testes de integração com Testcontainers para os repositórios Postgres do serviço de Planejamento, relay e consumidores (hoje só os casos de uso e o domínio têm teste).
+- Exportar o `.fit` num ciclocomputador ou relógio real e a exportação OTLP contra um Jaeger real: nenhum dos dois foi exercitado.
+- Provedor de identidade real (hoje a API só valida JWT; o `dev-jwt.sh` emite tokens de teste) e rotação de chave (JWKS).
+- Expor a correção de atividade (`PATCH /atividades/{id}`) no app e um endpoint para o atleta apagar a conta e os dados (design doc, seção 9).
 
 ## Dados e privacidade
 
@@ -110,7 +122,7 @@ Dados de saúde são sensíveis ([ADR 0008](docs/adr/0008-dados-de-saude-sensive
 
 ## Roteiros do núcleo
 
-Nenhuma issue do M1 é núcleo; os roteiros de entrevista ([`docs/roteiros/`](docs/roteiros)) nascem com as fórmulas de métricas (M2), o validador de restrições (M4) e o tradutor WorkoutKit (M5).
+Nenhuma issue do M1 é núcleo; os roteiros de entrevista ([`docs/roteiros/`](docs/roteiros)) cobrem as fórmulas de métricas (M2) e o validador de restrições (M4); o tradutor WorkoutKit (M5) ainda vai ter o seu.
 
 ## Licença
 
