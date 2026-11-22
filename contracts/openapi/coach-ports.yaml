@@ -1,0 +1,380 @@
+openapi: 3.1.0
+info:
+  title: Athlete Training Platform - Portas consumidas pelo Coach IA
+  version: 0.1.0
+  license:
+    name: MIT
+    identifier: MIT
+  description: |
+    Subconjunto dos contratos de métricas (`metricas.yaml`) e de planejamento (`planejamento.yaml`) que o
+    serviço `coach` consome (ADR 0021). O Coach nunca lê o banco de outro contexto: chama estas rotas com
+    o JWT do próprio usuário. Os nomes de campo são os dos contratos donos; o Coach os traduz numa ACL
+    (`services/coach/src/infrastructure/http/wire.ts`).
+
+    Este arquivo existe para que o teste de contrato do Coach (`services/coach/test/contract.test.ts`)
+    tenha exemplos versionados neste repositório. Quando os contratos donos chegarem à main, a fonte da
+    verdade é o contrato dono; divergência é bug de um dos lados.
+
+    PENDENTE NO PLANEJAMENTO: `POST /planos/{plano_id}/ajustes?dry_run=true`. Hoje `/ajustes` valida e,
+    se aceito, aplica. O Coach só pode aplicar depois da aprovação explícita (ADR 0005), então precisa
+    validar antes sem gravar. `dry_run=true` deve executar o validador e responder `AdjustmentResult`
+    sem criar versão, sem publicar evento e sem mudar o status do plano.
+servers:
+  - url: http://localhost:8121
+    description: Métricas
+  - url: http://localhost:8120
+    description: Planejamento
+tags:
+  - {name: metricas, description: 'Perfil, limiares, carga e atividades calculadas'}
+  - {name: planejamento, description: 'Planos, ajustes e vínculos'}
+paths:
+  /metricas/perfil:
+    get:
+      tags: [metricas]
+      operationId: getProfile
+      summary: Perfil fisiológico
+      description: Treinador informa `atleta_id` (vínculo ativo); atleta omite.
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/AtletaId'}]
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sexo, fc_repouso, fc_max]
+                properties:
+                  sexo: {type: string}
+                  fc_repouso: {type: integer}
+                  fc_max: {type: integer}
+              example: {sexo: M, fc_repouso: 52, fc_max: 188}
+        '404': {description: Não encontrado ou sem consentimento}
+  /metricas/limiares:
+    get:
+      tags: [metricas]
+      operationId: listThresholds
+      summary: Histórico de limiares
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/AtletaId'}]
+      responses:
+        '200':
+          description: Limiares
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items:
+                      type: object
+                      required: [tipo, valor, vigente_desde]
+                      properties:
+                        tipo: {type: string, enum: [ftp, pace_limiar, css]}
+                        valor: {type: number}
+                        vigente_desde: {type: string, format: date}
+              example: {itens: [{tipo: ftp, valor: 230, vigente_desde: '2026-09-01'}]}
+        '404': {description: Não encontrado ou sem consentimento}
+  /metricas/carga:
+    get:
+      tags: [metricas]
+      operationId: getLoad
+      summary: Série diária de TSS, CTL, ATL e TSB
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AtletaId'}
+        - {name: de, in: query, required: false, schema: {type: string, format: date}}
+        - {name: ate, in: query, required: false, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Dias em ordem crescente
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [atleta_id, dias]
+                properties:
+                  atleta_id: {type: string, format: uuid}
+                  dias:
+                    type: array
+                    items:
+                      type: object
+                      required: [dia, tss, ctl, atl, tsb]
+                      properties:
+                        dia: {type: string, format: date}
+                        tss: {type: number}
+                        ctl: {type: number}
+                        atl: {type: number}
+                        tsb: {type: number}
+              example:
+                atleta_id: 2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01
+                dias:
+                  - {dia: '2026-11-20', tss: 62.5, ctl: 41.2, atl: 55.0, tsb: -13.8}
+        '404': {description: Não encontrado ou sem consentimento}
+  /metricas/atividades:
+    get:
+      tags: [metricas]
+      operationId: listActivityLoads
+      summary: Carga por atividade
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AtletaId'}
+        - {name: de, in: query, required: false, schema: {type: string, format: date}}
+        - {name: ate, in: query, required: false, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Atividades
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items:
+                      type: object
+                      required: [atividade_id, dia, tipo, metodo, tss]
+                      properties:
+                        atividade_id: {type: string, format: uuid}
+                        dia: {type: string, format: date}
+                        tipo: {type: string}
+                        metodo: {type: string}
+                        tss: {type: number}
+              example:
+                itens:
+                  - {atividade_id: 9c1a7f4e-2b3d-4a55-8f0e-0d6b1c2a3e44, dia: '2026-11-20', tipo: corrida, metodo: rtss, tss: 62.5}
+        '404': {description: Não encontrado ou sem consentimento}
+  /planos:
+    get:
+      tags: [planejamento]
+      operationId: listPlans
+      summary: Planos do atleta (treinador informa `atleta_id`)
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: atleta_id, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Planos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, status, inicio]
+                      properties:
+                        id: {type: string, format: uuid}
+                        status: {type: string, enum: [aguardando_aprovacao, ativo, rejeitado]}
+                        inicio: {type: string, format: date}
+              example:
+                itens:
+                  - {id: 5b0e0f5a-7a41-4c36-a6a7-3b9d3f6a1c10, status: ativo, inicio: '2026-11-23'}
+        '404': {description: Não encontrado ou sem consentimento}
+  /planos/{plano_id}:
+    get:
+      tags: [planejamento]
+      operationId: getPlan
+      summary: Plano completo
+      security: [{bearerAuth: []}]
+      parameters: [{$ref: '#/components/parameters/PlanoId'}]
+      responses:
+        '200':
+          description: Plano
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, mesociclos]
+                properties:
+                  id: {type: string, format: uuid}
+                  mesociclos:
+                    type: array
+                    items:
+                      type: object
+                      required: [microciclos]
+                      properties:
+                        microciclos:
+                          type: array
+                          items:
+                            type: object
+                            required: [semana, inicio, treinos]
+                            properties:
+                              semana: {type: integer}
+                              inicio: {type: string, format: date}
+                              treinos:
+                                type: array
+                                items: {$ref: '#/components/schemas/Workout'}
+              example:
+                id: 5b0e0f5a-7a41-4c36-a6a7-3b9d3f6a1c10
+                mesociclos:
+                  - microciclos:
+                      - semana: 1
+                        inicio: '2026-11-23'
+                        treinos:
+                          - id: 0a1b2c3d-1111-4222-8333-444455556666
+                            data: '2026-11-24'
+                            modalidade: corrida
+                            nome: Rodagem leve
+                            intensidade: baixa
+                            duracao_s: 3000
+                            tss_planejado: 45
+                            blocos:
+                              - repeticoes: 1
+                                passos:
+                                  - tipo: aquecimento
+                                    objetivo: {tipo: tempo, valor: 600}
+                                    alvo: {tipo: fc_pct_max, baixo: 60, alto: 70}
+                          - id: 0a1b2c3d-1111-4222-8333-444455557777
+                            data: '2026-11-26'
+                            modalidade: ciclismo
+                            nome: Limiar
+                            intensidade: alta
+                            duracao_s: 3600
+                            tss_planejado: 70
+                            blocos: []
+        '404': {description: Não encontrado ou sem consentimento}
+  /planos/{plano_id}/ajustes:
+    post:
+      tags: [planejamento]
+      operationId: proposeAdjustment
+      summary: Valida e, se aceito, aplica o ajuste
+      description: |
+        Sem `dry_run`: contrato existente (`planejamento.yaml`); o Coach só chama depois da aprovação explícita,
+        com `origem: coach`. Com `dry_run=true`: PENDENTE (ver descrição do arquivo).
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/PlanoId'}
+        - {name: dry_run, in: query, required: false, schema: {type: boolean, default: false}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo, alteracoes]
+              properties:
+                motivo: {type: string, maxLength: 500}
+                origem: {type: string, enum: [atleta, treinador, coach]}
+                relato_dor: {type: boolean}
+                alteracoes:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [treino_id, acao]
+                    properties:
+                      treino_id: {type: string, format: uuid}
+                      acao: {type: string, enum: [mover, alterar_intensidade, remover]}
+                      nova_data: {type: string, format: date}
+                      nova_intensidade: {type: string, enum: [descanso, baixa, moderada, alta]}
+            example:
+              motivo: Semana com cansaço relatado
+              origem: coach
+              relato_dor: false
+              alteracoes:
+                - {treino_id: 0a1b2c3d-1111-4222-8333-444455557777, acao: alterar_intensidade, nova_intensidade: baixa}
+      responses:
+        '200':
+          description: Resultado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [aceito, violacoes]
+                properties:
+                  aceito: {type: boolean}
+                  violacoes:
+                    type: array
+                    items:
+                      type: object
+                      required: [regra, mensagem]
+                      properties:
+                        regra: {type: string}
+                        mensagem: {type: string}
+              example: {aceito: true, violacoes: []}
+        '404': {description: Não encontrado ou sem consentimento}
+  /vinculos:
+    get:
+      tags: [planejamento]
+      operationId: listLinks
+      summary: Vínculos em que o chamador é atleta ou treinador
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Vínculos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items:
+                      type: object
+                      required: [atleta_id, treinador_id, status, categorias]
+                      properties:
+                        atleta_id: {type: string, format: uuid}
+                        treinador_id: {type: string, format: uuid}
+                        status: {type: string, enum: [pendente, ativo, revogado]}
+                        categorias:
+                          type: array
+                          items: {type: string, enum: [treinos, frequencia_cardiaca, plano]}
+              example:
+                itens:
+                  - atleta_id: 2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01
+                    treinador_id: 7d2a8c60-1f4b-4e0a-9b53-6a1e2f3c4d55
+                    status: ativo
+                    categorias: [treinos, plano]
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    AtletaId: {name: atleta_id, in: query, required: false, schema: {type: string, format: uuid}}
+    PlanoId: {name: plano_id, in: path, required: true, schema: {type: string, format: uuid}}
+  schemas:
+    Workout:
+      type: object
+      required: [id, data, modalidade, nome, intensidade, duracao_s, tss_planejado, blocos]
+      properties:
+        id: {type: string, format: uuid}
+        data: {type: string, format: date}
+        modalidade: {type: string, enum: [natacao, ciclismo, corrida, forca]}
+        nome: {type: string}
+        intensidade: {type: string, enum: [descanso, baixa, moderada, alta]}
+        duracao_s: {type: integer}
+        tss_planejado: {type: number}
+        blocos:
+          type: array
+          items:
+            type: object
+            required: [repeticoes, passos]
+            properties:
+              repeticoes: {type: integer}
+              passos:
+                type: array
+                items:
+                  type: object
+                  required: [tipo, objetivo]
+                  properties:
+                    tipo: {type: string, enum: [aquecimento, trabalho, recuperacao, desaquecimento]}
+                    objetivo:
+                      type: object
+                      required: [tipo]
+                      properties:
+                        tipo: {type: string, enum: [tempo, distancia, aberto]}
+                        valor: {type: number}
+                    alvo:
+                      type: object
+                      required: [tipo, baixo, alto]
+                      properties:
+                        tipo: {type: string}
+                        baixo: {type: number}
+                        alto: {type: number}
