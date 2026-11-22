@@ -1,0 +1,17 @@
+{
+  "event_id": "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d",
+  "tipo": "TreinoImportado",
+  "versao": 1,
+  "ocorrido_em": "2026-03-02T10:15:30Z",
+  "import_id": "3c1d2e4f-0b1a-4c2d-8e3f-9a8b7c6d5e40",
+  "dados": {
+    "atleta_id": "2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01",
+    "atividade_id": "7a1b2c3d-4e5f-4a6b-8c7d-0e1f2a3b4c5d",
+    "tipo": "corrida",
+    "fonte": "apple_export",
+    "inicio_utc": "2026-03-01T07:30:00Z",
+    "duracao_s": 3600,
+    "distancia_m": 10250.5,
+    "quantidade_amostras": 3600
+  }
+}

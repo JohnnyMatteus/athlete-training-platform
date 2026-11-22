@@ -1,0 +1,30 @@
+name: Bug
+description: Algo não funciona como esperado
+labels: [bug]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Área
+      options: [api, ingest, contracts, infra, docs]
+    validations:
+      required: true
+  - type: textarea
+    id: descricao
+    attributes:
+      label: O que aconteceu
+    validations:
+      required: true
+  - type: textarea
+    id: reproducao
+    attributes:
+      label: Como reproduzir
+      description: Use apenas dados sintéticos. Não cole dados reais de saúde.
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Comportamento esperado
+    validations:
+      required: true
