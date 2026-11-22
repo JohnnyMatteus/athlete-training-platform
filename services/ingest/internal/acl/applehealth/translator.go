@@ -102,7 +102,7 @@ func readWorkouts(ctx context.Context, f *zip.File, athlete port.AthleteID, sink
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", port.ErrMalformed, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // só leitura: o fim do arquivo já foi validado pelo decoder
 	dec := xml.NewDecoder(rc)
 
 	var wins []window
@@ -281,7 +281,7 @@ func readRecords(ctx context.Context, f *zip.File, wins []window, sink port.Sink
 	if err != nil {
 		return fmt.Errorf("%w: %v", port.ErrMalformed, err)
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }() // só leitura: o fim do arquivo já foi validado pelo decoder
 	dec := xml.NewDecoder(rc)
 
 	maxEnd := make([]time.Time, len(wins)) // maior fim até o índice i, para a busca recuar pouco

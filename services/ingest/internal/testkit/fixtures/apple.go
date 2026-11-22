@@ -56,14 +56,20 @@ func WriteAppleExport(w io.Writer, opt AppleOptions) error {
 	return zw.Close()
 }
 
+// countWriter conta bytes e guarda o primeiro erro de escrita (sticky), devolvido por writeAppleXML.
 type countWriter struct {
-	w io.Writer
-	n int64
+	w   io.Writer
+	n   int64
+	err error
 }
 
 func (c *countWriter) Write(p []byte) (int, error) {
+	if c.err != nil {
+		return 0, c.err
+	}
 	n, err := c.w.Write(p)
 	c.n += int64(n)
+	c.err = err
 	return n, err
 }
 
@@ -72,7 +78,7 @@ func writeAppleXML(out io.Writer, opt AppleOptions) error {
 	rnd := rand.New(rand.NewSource(opt.Seed))
 	workouts := plan(opt)
 
-	fmt.Fprintf(cw, `<?xml version="1.0" encoding="UTF-8"?>
+	_, _ = fmt.Fprintf(cw, `<?xml version="1.0" encoding="UTF-8"?>
 <HealthData locale="pt_BR">
  <ExportDate value="2024-03-20 08:00:00 -0300"/>
  <Me HKCharacteristicTypeIdentifierDateOfBirth="1990-01-01" HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexNotSet"/>
@@ -89,17 +95,19 @@ func writeAppleXML(out io.Writer, opt AppleOptions) error {
 	if opt.TargetXMLBytes > 0 {
 		reserve := int64(len(workouts)) * 900 // espaço dos elementos Workout no fim
 		day := Base.Add(-30 * 24 * time.Hour)
-		for i := 0; cw.n+reserve < opt.TargetXMLBytes; i++ {
+		for i := 0; cw.err == nil && cw.n+reserve < opt.TargetXMLBytes; i++ {
 			at := day.Add(time.Duration(i) * 7 * time.Second)
-			fmt.Fprintf(cw, " <Record type=\"HKQuantityTypeIdentifierStepCount\" sourceName=\"iPhone Ficticio\" unit=\"count\" creationDate=\"%s\" startDate=\"%s\" endDate=\"%s\" value=\"%d\"/>\n",
+			_, _ = fmt.Fprintf(cw, " <Record type=\"HKQuantityTypeIdentifierStepCount\" sourceName=\"iPhone Ficticio\" unit=\"count\" creationDate=\"%s\" startDate=\"%s\" endDate=\"%s\" value=\"%d\"/>\n",
 				at.In(brt).Format(appleLayout), at.In(brt).Format(appleLayout), at.Add(5*time.Second).In(brt).Format(appleLayout), 5+rnd.Intn(20))
 		}
 	}
 	for _, wk := range workouts {
 		writeWorkout(cw, wk)
 	}
-	_, err := io.WriteString(cw, "</HealthData>\n")
-	return err
+	if _, err := io.WriteString(cw, "</HealthData>\n"); err != nil {
+		return err
+	}
+	return cw.err
 }
 
 func plan(opt AppleOptions) []workoutSpec {
@@ -150,22 +158,22 @@ func valueFor(ch string, t int, rnd *rand.Rand) float64 {
 func writeRecord(w io.Writer, typ string, at time.Time, v float64) {
 	unit := map[string]string{hrType: "count/min", powerType: "W", cadType: "count/min", cspdType: "km/hr", rspdType: "m/s"}[typ]
 	ts := at.In(brt).Format(appleLayout)
-	fmt.Fprintf(w, " <Record type=\"%s\" sourceName=\"Apple Watch Ficticio\" unit=\"%s\" creationDate=\"%s\" startDate=\"%s\" endDate=\"%s\" value=\"%g\"/>\n", typ, unit, ts, ts, ts, v)
+	_, _ = fmt.Fprintf(w, " <Record type=\"%s\" sourceName=\"Apple Watch Ficticio\" unit=\"%s\" creationDate=\"%s\" startDate=\"%s\" endDate=\"%s\" value=\"%g\"/>\n", typ, unit, ts, ts, ts, v)
 }
 
 func writeWorkout(w io.Writer, wk workoutSpec) {
 	start, end := wk.start.In(brt).Format(appleLayout), wk.start.Add(time.Duration(wk.seconds)*time.Second).In(brt).Format(appleLayout)
-	fmt.Fprintf(w, " <Workout workoutActivityType=\"%s\" duration=\"%g\" durationUnit=\"min\" totalDistance=\"%g\" totalDistanceUnit=\"km\" sourceName=\"Apple Watch Ficticio\" sourceVersion=\"10.0\" creationDate=\"%s\" startDate=\"%s\" endDate=\"%s\">\n",
+	_, _ = fmt.Fprintf(w, " <Workout workoutActivityType=\"%s\" duration=\"%g\" durationUnit=\"min\" totalDistance=\"%g\" totalDistanceUnit=\"km\" sourceName=\"Apple Watch Ficticio\" sourceVersion=\"10.0\" creationDate=\"%s\" startDate=\"%s\" endDate=\"%s\">\n",
 		wk.typ, float64(wk.seconds)/60, wk.distKm, end, start, end)
 	if wk.swimLoc != 0 {
-		fmt.Fprintf(w, "  <MetadataEntry key=\"HKSwimmingLocationType\" value=\"%d\"/>\n  <MetadataEntry key=\"HKLapLength\" value=\"25 m\"/>\n", wk.swimLoc)
+		_, _ = fmt.Fprintf(w, "  <MetadataEntry key=\"HKSwimmingLocationType\" value=\"%d\"/>\n  <MetadataEntry key=\"HKLapLength\" value=\"25 m\"/>\n", wk.swimLoc)
 	} else {
-		fmt.Fprintf(w, "  <MetadataEntry key=\"HKIndoorWorkout\" value=\"%d\"/>\n", b2i(wk.indoor))
+		_, _ = fmt.Fprintf(w, "  <MetadataEntry key=\"HKIndoorWorkout\" value=\"%d\"/>\n", b2i(wk.indoor))
 	}
 	for _, ch := range wk.channels {
-		fmt.Fprintf(w, "  <WorkoutStatistics type=\"%s\" startDate=\"%s\" endDate=\"%s\" average=\"1\"/>\n", ch, start, end)
+		_, _ = fmt.Fprintf(w, "  <WorkoutStatistics type=\"%s\" startDate=\"%s\" endDate=\"%s\" average=\"1\"/>\n", ch, start, end)
 	}
-	fmt.Fprintf(w, "  <WorkoutRoute sourceName=\"Apple Watch Ficticio\"><FileReference path=\"/workout-routes/route_%s.gpx\"/></WorkoutRoute>\n </Workout>\n", wk.start.Format("2006-01-02_15"))
+	_, _ = fmt.Fprintf(w, "  <WorkoutRoute sourceName=\"Apple Watch Ficticio\"><FileReference path=\"/workout-routes/route_%s.gpx\"/></WorkoutRoute>\n </Workout>\n", wk.start.Format("2006-01-02_15"))
 }
 
 func b2i(b bool) int {

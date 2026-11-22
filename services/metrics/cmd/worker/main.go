@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -61,12 +62,20 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("rabbitmq: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil && !errors.Is(err, amqp.ErrClosed) {
+			log.Warn("fechar conexão rabbitmq", "erro", err)
+		}
+	}()
 	pub, err := rabbit.NewPublisher(conn)
 	if err != nil {
 		return err
 	}
-	defer pub.Close()
+	defer func() {
+		if err := pub.Close(); err != nil && !errors.Is(err, amqp.ErrClosed) {
+			log.Warn("fechar canal de publicação", "erro", err)
+		}
+	}()
 
 	svc := metrics.NewService(postgres.NewStore(pool), postgres.NewSamples(samplesPool), time.Now)
 	imported, err := consumer.New(conn, consumer.QueueImported, consumer.Imported(svc), log)

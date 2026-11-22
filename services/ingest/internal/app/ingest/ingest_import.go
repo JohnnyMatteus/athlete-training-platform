@@ -96,7 +96,7 @@ func (u *IngestImport) process(ctx context.Context, msg port.ImportReceived) err
 	if err != nil {
 		return fmt.Errorf("abrir arquivo: %w", err)
 	}
-	defer obj.Close()
+	defer func() { _ = obj.Close() }() // só leitura do objeto; falha ao fechar não afeta o resultado
 
 	return u.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
 		first, err := tx.MarkProcessed(ctx, msg.EventID)

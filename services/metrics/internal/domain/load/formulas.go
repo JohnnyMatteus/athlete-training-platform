@@ -38,7 +38,7 @@ func IntensityTSS(durationS, intensity float64) float64 {
 
 // SwimTSS = IF³ × horas × 100, com IF = velocidade normalizada / CSS.
 func SwimTSS(durationS, intensity float64) float64 {
-	return math.Pow(intensity, 3) * durationS / 3600 * 100
+	return intensity * intensity * intensity * durationS / 3600 * 100
 }
 
 // CSS devolve a velocidade crítica de natação em m/s a partir de dois tiros de teste (200 m e 400 m).
@@ -65,7 +65,7 @@ func Trimp(durationMin, avgHR, restHR, maxHR float64, sex Sex) (float64, error) 
 
 // minettiCost é o custo energético da corrida (J/kg/m) em função da inclinação (fração).
 func minettiCost(i float64) float64 {
-	return 155.4*math.Pow(i, 5) - 30.4*math.Pow(i, 4) - 43.3*math.Pow(i, 3) + 46.3*i*i + 19.5*i + 3.6
+	return 155.4*math.Pow(i, 5) - 30.4*math.Pow(i, 4) - 43.3*i*i*i + 46.3*i*i + 19.5*i + 3.6
 }
 
 // GradeFactor é o quanto a inclinação encarece a corrida em relação ao plano (Minetti 2002).

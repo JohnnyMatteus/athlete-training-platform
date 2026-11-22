@@ -89,7 +89,7 @@ func (w *windowed) fill(off int64) error {
 	}
 	w.buf = w.buf[:size]
 	n, err := w.ra.ReadAt(w.buf, off)
-	if err != nil && !(err == io.EOF && int64(n) == size) {
+	if err != nil && (err != io.EOF || int64(n) != size) {
 		w.buf, w.off = w.buf[:0], -1
 		return err
 	}

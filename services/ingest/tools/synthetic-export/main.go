@@ -21,16 +21,29 @@ func main() {
 	out := flag.String("out", "export.zip", "arquivo de saída")
 	flag.Parse()
 
-	f, err := os.Create(*out)
+	sum, err := generate(*out, *seed, *sizeMB)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer f.Close()
-	h := sha256.New()
-	if err := fixtures.WriteAppleExport(io.MultiWriter(f, h), fixtures.AppleOptions{Seed: *seed, TargetXMLBytes: *sizeMB << 20}); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	fmt.Println(sum)
+}
+
+// generate grava o export em path e devolve o SHA-256. O erro de Close importa: é o último
+// ponto em que uma falha de escrita no disco aparece.
+func generate(path string, seed, sizeMB int64) (sum string, err error) {
+	f, err := os.Create(path)
+	if err != nil {
+		return "", err
 	}
-	fmt.Println(hex.EncodeToString(h.Sum(nil)))
+	defer func() {
+		if cerr := f.Close(); cerr != nil && err == nil {
+			sum, err = "", cerr
+		}
+	}()
+	h := sha256.New()
+	if err := fixtures.WriteAppleExport(io.MultiWriter(f, h), fixtures.AppleOptions{Seed: seed, TargetXMLBytes: sizeMB << 20}); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

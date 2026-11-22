@@ -74,7 +74,11 @@ func run(ctx context.Context, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("rabbitmq: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil && !errors.Is(err, amqp.ErrClosed) {
+			log.Warn("fechar conexão rabbitmq", "erro", err)
+		}
+	}()
 
 	pub, err := rabbit.NewPublisher(conn)
 	if err != nil {
