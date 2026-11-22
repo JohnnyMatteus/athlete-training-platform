@@ -23,5 +23,10 @@ Decisões iniciais do [design doc](../design-doc.md) (seção 13), no formato de
 | [0017](0017-aderencia-calculada-em-planejamento.md) | (implementação) | Aderência calculada em Planejamento a partir de MetricasCalculadas | não |
 | [0018](0018-opentelemetry-de-ponta-a-ponta.md) | (implementação) | OpenTelemetry de ponta a ponta, propagação W3C por HTTP e AMQP | não |
 | [0019](0019-retencao-de-arquivos-por-ciclo-de-vida-do-bucket.md) | (implementação) | Retenção de 7 dias dos arquivos por ciclo de vida do bucket | sim |
+| [0030](0030-app-portas-adaptadores-e-indisponivel-honesto.md) | (implementação) | App: portas e adaptadores, zod espelhando contratos, estado indisponível honesto | não (M3) |
+| [0031](0031-app-token-jwt-em-armazenamento-seguro.md) | (implementação) | App: JWT no Keychain/Keystore, nunca em localStorage | não (M3) |
+| [0032](0032-app-leitura-incremental-de-saude.md) | (implementação) | App: leitura incremental do HealthKit e Health Connect com âncora e consentimento | não (M3) |
+| [0033](0033-app-upload-resumivel-e-hash-incremental.md) | (implementação) | App: upload tus resumível, hash incremental, retomada do lote | não (M3) |
+| [0034](0034-app-janela-deslizante-e-traducao-de-alvos.md) | (implementação) | Plugin WorkoutKit: janela deslizante no plugin, tradução de alvos no app | não (M5) |
 
 Onde o design doc não registra alternativas, o ADR diz isso explicitamente em vez de inventar; o autor completa antes de aceitar.

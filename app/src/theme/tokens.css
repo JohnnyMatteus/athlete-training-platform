@@ -1,0 +1,108 @@
+/* Identidade "Fôlego" (design/direcao-de-identidade.md, seção 13). Nenhum hex fora deste arquivo. */
+:root {
+  --atp-bg: #f1eff6;
+  --atp-surface: #fbfafe;
+  --atp-surface-variant: #e0dcea;
+  --atp-on-surface: #1d1a2b;
+  --atp-primary: #4f35a1;
+  --atp-on-primary: #ffffff;
+  --atp-accent: #566200;
+  --atp-on-accent: #ffffff;
+  --atp-success: #256b3e;
+  --atp-warning: #8a5500;
+  --atp-error: #a82020;
+  --atp-gap-edge: #8f83c4;
+  --atp-zone-1: #e4defa;
+  --atp-zone-2: #c3b4ff;
+  --atp-zone-3: #8d77e0;
+  --atp-zone-4: #5f45b8;
+  --atp-zone-5: #2f1f73;
+  --atp-zone-fg-1: #1d1a2b;
+  --atp-zone-fg-2: #1d1a2b;
+  --atp-zone-fg-3: #1d1a2b;
+  --atp-zone-fg-4: #ffffff;
+  --atp-zone-fg-5: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --atp-bg: #14111f;
+    --atp-surface: #1d192c;
+    --atp-surface-variant: #302a45;
+    --atp-on-surface: #ece8f7;
+    --atp-primary: #c3b4ff;
+    --atp-on-primary: #25175a;
+    --atp-accent: #d4f03c;
+    --atp-on-accent: #1f2600;
+    --atp-success: #8fd6a5;
+    --atp-warning: #f2be6a;
+    --atp-error: #ff9a90;
+    --atp-gap-edge: #7a6bb8;
+    --atp-zone-1: #3a3060;
+    --atp-zone-2: #5a47a0;
+    --atp-zone-3: #8d77e0;
+    --atp-zone-4: #b9a8ff;
+    --atp-zone-5: #e4defa;
+    --atp-zone-fg-1: #ece8f7;
+    --atp-zone-fg-2: #ffffff;
+    --atp-zone-fg-3: #14111f;
+    --atp-zone-fg-4: #14111f;
+    --atp-zone-fg-5: #14111f;
+  }
+}
+
+:root[data-theme='dark'] {
+  --atp-bg: #14111f;
+  --atp-surface: #1d192c;
+  --atp-surface-variant: #302a45;
+  --atp-on-surface: #ece8f7;
+  --atp-primary: #c3b4ff;
+  --atp-on-primary: #25175a;
+  --atp-accent: #d4f03c;
+  --atp-on-accent: #1f2600;
+  --atp-success: #8fd6a5;
+  --atp-warning: #f2be6a;
+  --atp-error: #ff9a90;
+  --atp-gap-edge: #7a6bb8;
+  --atp-zone-1: #3a3060;
+  --atp-zone-2: #5a47a0;
+  --atp-zone-3: #8d77e0;
+  --atp-zone-4: #b9a8ff;
+  --atp-zone-5: #e4defa;
+  --atp-zone-fg-1: #ece8f7;
+  --atp-zone-fg-2: #ffffff;
+  --atp-zone-fg-3: #14111f;
+  --atp-zone-fg-4: #14111f;
+  --atp-zone-fg-5: #14111f;
+}
+
+:root {
+  --ion-font-family: 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --atp-font-title: 'Saira Semi Condensed', system-ui, sans-serif;
+  --atp-font-num: 'JetBrains Mono', ui-monospace, monospace;
+  --ion-background-color: var(--atp-bg);
+  --ion-text-color: var(--atp-on-surface);
+  --ion-color-primary: var(--atp-primary);
+  --ion-color-primary-contrast: var(--atp-on-primary);
+  --ion-color-secondary: var(--atp-accent);
+  --ion-color-secondary-contrast: var(--atp-on-accent);
+  --ion-color-success: var(--atp-success);
+  --ion-color-warning: var(--atp-warning);
+  --ion-color-danger: var(--atp-error);
+  --ion-item-background: var(--atp-surface);
+  --ion-card-background: var(--atp-surface);
+  --ion-toolbar-background: var(--atp-bg);
+  --ion-tab-bar-background: var(--atp-surface);
+  --ion-tab-bar-color-selected: var(--atp-primary);
+  --ion-border-color: var(--atp-surface-variant);
+}
+
+h1, h2, h3 { font-family: var(--atp-font-title); font-weight: 600; }
+.num { font-family: var(--atp-font-num); font-variant-numeric: tabular-nums; font-weight: 500; }
+ion-card { border-radius: 4px; box-shadow: none; border: 1px solid var(--atp-surface-variant); }
+ion-button { --border-radius: 4px; min-height: 44px; text-transform: none; }
+:focus-visible { outline: 2px solid var(--atp-primary); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
+}
