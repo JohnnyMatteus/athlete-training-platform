@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
+# swoole e sockets não existem na imagem do composer; a imagem final instala os dois.
 # API de importação (Hyperf/Swoole). Dependências na etapa de build; a imagem final não tem compilador.
 FROM composer:2 AS deps
 WORKDIR /app
 COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-req=ext-swoole
+RUN composer install --no-dev --no-scripts --no-interaction --prefer-dist --optimize-autoloader --ignore-platform-req=ext-swoole --ignore-platform-req=ext-sockets
 
 FROM php:8.4-cli-alpine3.23 AS runtime
 # Extensões do Hyperf: swoole (versão fixada), pgsql para PDO, sockets e pcntl para o servidor.
