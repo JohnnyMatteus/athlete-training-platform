@@ -1,0 +1,104 @@
+asyncapi: 3.0.0
+info:
+  title: Athlete Training Platform - Eventos de Importação
+  version: 1.0.0
+  description: |
+    Eventos do contexto de Importação no RabbitMQ (exchange `importacao`, tipo topic). Entrega pelo
+    menos uma vez: consumidores deduplicam por `event_id`. Mensagem rejeitada sem requeue vai para
+    a exchange `importacao.dlx` e para a fila `importacao.dlq`.
+    Os esquemas JSON em `events/importacao/*.v1.schema.json` são a fonte da verdade.
+defaultContentType: application/json
+channels:
+  importacaoRecebida:
+    address: importacao.recebida
+    messages:
+      ImportacaoRecebida:
+        $ref: '#/components/messages/ImportacaoRecebida'
+  treinoImportado:
+    address: treino.importado
+    messages:
+      TreinoImportado:
+        $ref: '#/components/messages/TreinoImportado'
+  importacaoConcluida:
+    address: importacao.concluida
+    messages:
+      ImportacaoConcluida:
+        $ref: '#/components/messages/ImportacaoConcluida'
+  importacaoFalhou:
+    address: importacao.falhou
+    messages:
+      ImportacaoFalhou:
+        $ref: '#/components/messages/ImportacaoFalhou'
+  atividadeCorrigida:
+    address: atividade.corrigida
+    messages:
+      AtividadeCorrigida:
+        $ref: '#/components/messages/AtividadeCorrigida'
+  metricasCalculadas:
+    address: metricas.calculadas
+    messages:
+      MetricasCalculadas:
+        $ref: '#/components/messages/MetricasCalculadas'
+operations:
+  publishImportacaoRecebida:
+    action: send
+    summary: A API publica quando o upload é conferido.
+    channel: {$ref: '#/channels/importacaoRecebida'}
+  consumeImportacaoRecebida:
+    action: receive
+    summary: O worker de ingestão consome (fila ingest.importacao-recebida).
+    channel: {$ref: '#/channels/importacaoRecebida'}
+  publishTreinoImportado:
+    action: send
+    summary: O worker publica uma vez por atividade nova.
+    channel: {$ref: '#/channels/treinoImportado'}
+  publishImportacaoConcluida:
+    action: send
+    summary: O worker publica ao terminar o lote.
+    channel: {$ref: '#/channels/importacaoConcluida'}
+  publishImportacaoFalhou:
+    action: send
+    summary: API ou worker publicam quando o lote falha.
+    channel: {$ref: '#/channels/importacaoFalhou'}
+  consumeResultado:
+    action: receive
+    summary: A API consome conclusão e falha (fila api.importacao-resultado) para atualizar o lote.
+    channel: {$ref: '#/channels/importacaoConcluida'}
+  consumeTreinoImportado:
+    action: receive
+    summary: O serviço de métricas consome (fila metrics.treino-importado) e calcula a carga.
+    channel: {$ref: '#/channels/treinoImportado'}
+  consumeAtividadeCorrigida:
+    action: receive
+    summary: O serviço de métricas consome (fila metrics.atividade-corrigida) e recalcula da data afetada em diante. Publicado na exchange `importacao`.
+    channel: {$ref: '#/channels/atividadeCorrigida'}
+  publishMetricasCalculadas:
+    action: send
+    summary: O serviço de métricas publica na exchange `metricas` depois de gravar carga_atividade e carga_diaria.
+    channel: {$ref: '#/channels/metricasCalculadas'}
+components:
+  messages:
+    ImportacaoRecebida:
+      name: ImportacaoRecebida
+      payload:
+        $ref: 'events/importacao/importacao-recebida.v1.schema.json'
+    TreinoImportado:
+      name: TreinoImportado
+      payload:
+        $ref: 'events/importacao/treino-importado.v1.schema.json'
+    ImportacaoConcluida:
+      name: ImportacaoConcluida
+      payload:
+        $ref: 'events/importacao/importacao-concluida.v1.schema.json'
+    ImportacaoFalhou:
+      name: ImportacaoFalhou
+      payload:
+        $ref: 'events/importacao/importacao-falhou.v1.schema.json'
+    AtividadeCorrigida:
+      name: AtividadeCorrigida
+      payload:
+        $ref: 'events/atividades/atividade-corrigida.v1.schema.json'
+    MetricasCalculadas:
+      name: MetricasCalculadas
+      payload:
+        $ref: 'events/metricas/metricas-calculadas.v1.schema.json'

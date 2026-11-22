@@ -1,0 +1,309 @@
+openapi: 3.1.0
+info:
+  title: Athlete Training Platform - API de Importação
+  version: 1.0.0
+  description: |
+    Criação e acompanhamento de importações (export.zip do app Saúde, .fit, .tcx e .gpx).
+
+    O arquivo em si não passa por esta API: o cliente envia por upload resumível (protocolo tus,
+    servidor `tusd` com backend S3/MinIO) e o `tusd` avisa a API pelos hooks HTTP descritos abaixo.
+
+    Autenticação por JWT RS256 (`Authorization: Bearer`), validado pela API (ADR 0011). A claim `sub`
+    é o `atleta_id`. Papéis (RBAC) não fazem parte do M1.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:9501
+    description: Desenvolvimento local
+tags:
+  - name: importacoes
+    description: Operações públicas usadas pelo app
+  - name: hooks
+    description: Chamadas internas do servidor tus (não expostas ao app)
+paths:
+  /imports:
+    post:
+      tags: [importacoes]
+      operationId: createImport
+      summary: Cria uma importação
+      description: |
+        Cria o lote com status `aguardando_upload` e registra o consentimento LGPD do atleta para
+        a importação (`consentimento.aceito` tem de ser `true`). A idempotência é por atividade, não
+        por arquivo: o mesmo sha256 enviado de novo cria um novo lote.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateImportRequest'
+            examples:
+              exportZip:
+                summary: export.zip do app Saúde
+                value:
+                  nome_arquivo: export.zip
+                  tamanho_bytes: 104857600
+                  tipo_arquivo: zip
+                  sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                  consentimento:
+                    aceito: true
+                    versao_termo: '2026-11'
+                    categorias: [treinos, frequencia_cardiaca]
+      responses:
+        '201':
+          description: Lote criado
+          headers:
+            Location:
+              description: URL do lote (`/imports/{import_id}`)
+              schema: {type: string}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateImportResponse'
+              examples:
+                criado:
+                  value:
+                    import_id: 3c1d2e4f-0b1a-4c2d-8e3f-9a8b7c6d5e40
+                    status: aguardando_upload
+                    upload_url: http://localhost:8080/files/
+                    upload_metadata:
+                      import_id: 3c1d2e4f-0b1a-4c2d-8e3f-9a8b7c6d5e40
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+  /imports/{import_id}:
+    get:
+      tags: [importacoes]
+      operationId: getImport
+      summary: Consulta status e totais de uma importação
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/ImportId'
+      responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '200':
+          description: Lote encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Import'
+              examples:
+                concluido:
+                  value:
+                    import_id: 3c1d2e4f-0b1a-4c2d-8e3f-9a8b7c6d5e40
+                    nome_arquivo: export.zip
+                    tamanho_bytes: 104857600
+                    tipo_arquivo: zip
+                    sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                    status: concluido
+                    versao_formato: apple-health-export-2024
+                    importadas: 3
+                    duplicadas: 0
+                    erros: 0
+                    motivo_falha: null
+                    criado_em: '2026-03-02T10:00:00Z'
+                    atualizado_em: '2026-03-02T10:15:30Z'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /hooks/tus:
+    post:
+      tags: [hooks]
+      operationId: tusHook
+      security: []  # chamada interna do tusd: sem JWT; o segredo do hook (TUSD_HOOK_SECRET) fica fora do contrato
+      summary: Hook HTTP do tusd
+      description: |
+        Chamado pelo `tusd` (`-hooks-http`) nos eventos `pre-create` e `post-finish`.
+
+        - `pre-create`: o cliente deve enviar `import_id` em `Upload-Metadata` e o JWT em
+          `Authorization` (o tusd encaminha o cabeçalho com `-hooks-http-forward-headers`). Se o lote
+          não existe, não é do atleta do token ou não está em `aguardando_upload` (concluído, falhou
+          ou expirado), a resposta rejeita o upload (`RejectUpload: true`).
+        - `post-finish`: a API confere o sha256 do objeto. Se bater, o lote passa a `recebido` e
+          `ImportacaoRecebida` entra na outbox; se não, o lote passa a `falhou` e `ImportacaoFalhou`
+          entra na outbox.
+
+        A resposta é sempre 200; a rejeição vai no corpo, conforme o formato de hooks do tusd v2.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TusHookRequest'
+      responses:
+        '200':
+          description: Resposta ao tusd
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TusHookResponse'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 emitido pelo provedor de identidade; `sub` em UUID é o atleta.
+  parameters:
+    ImportId:
+      name: import_id
+      in: path
+      required: true
+      schema: {type: string, format: uuid}
+  schemas:
+    FileType:
+      type: string
+      enum: [zip, fit, tcx, gpx]
+    ImportStatus:
+      type: string
+      enum: [aguardando_upload, recebido, processando, concluido, falhou]
+      description: |
+        `aguardando_upload` -> `recebido` (hook) -> `processando` (worker) -> `concluido` ou `falhou`.
+        `falhou` também é alcançável a partir de `aguardando_upload` (sha256 divergente).
+    CreateImportRequest:
+      type: object
+      additionalProperties: false
+      required: [nome_arquivo, tamanho_bytes, tipo_arquivo, sha256, consentimento]
+      properties:
+        nome_arquivo: {type: string, minLength: 1, maxLength: 255}
+        tamanho_bytes: {type: integer, minimum: 1}
+        tipo_arquivo: {$ref: '#/components/schemas/FileType'}
+        sha256:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          description: sha256 do arquivo em hexadecimal minúsculo
+        consentimento: {$ref: '#/components/schemas/Consent'}
+    Consent:
+      type: object
+      description: Consentimento LGPD explícito e granular por categoria de dado (ADR 0008). Gravado no lote.
+      additionalProperties: false
+      required: [aceito, versao_termo, categorias]
+      properties:
+        aceito:
+          type: boolean
+          const: true
+          description: Tem de ser `true`; a API rejeita a importação sem consentimento explícito.
+        versao_termo:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Versão do termo de consentimento apresentada ao atleta
+        categorias:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [treinos, frequencia_cardiaca, localizacao, potencia]
+    CreateImportResponse:
+      type: object
+      required: [import_id, status, upload_url, upload_metadata]
+      properties:
+        import_id: {type: string, format: uuid}
+        status: {$ref: '#/components/schemas/ImportStatus'}
+        upload_url:
+          type: string
+          format: uri
+          description: Endpoint de criação de upload do servidor tus
+        upload_metadata:
+          type: object
+          required: [import_id]
+          properties:
+            import_id: {type: string, format: uuid}
+          description: Pares que o cliente deve enviar no cabeçalho `Upload-Metadata`
+    Import:
+      type: object
+      required: [import_id, nome_arquivo, tamanho_bytes, tipo_arquivo, sha256, status, importadas, duplicadas, erros, criado_em, atualizado_em]
+      properties:
+        import_id: {type: string, format: uuid}
+        nome_arquivo: {type: string}
+        tamanho_bytes: {type: integer}
+        tipo_arquivo: {$ref: '#/components/schemas/FileType'}
+        sha256: {type: string}
+        status: {$ref: '#/components/schemas/ImportStatus'}
+        versao_formato: {type: [string, 'null']}
+        importadas: {type: integer, minimum: 0}
+        duplicadas: {type: integer, minimum: 0}
+        erros: {type: integer, minimum: 0}
+        motivo_falha: {type: [string, 'null']}
+        criado_em: {type: string, format: date-time}
+        atualizado_em: {type: string, format: date-time}
+    Problem:
+      type: object
+      description: Erro no formato RFC 9457 (`application/problem+json`)
+      required: [type, title, status]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [campo, mensagem]
+            properties:
+              campo: {type: string}
+              mensagem: {type: string}
+    TusHookRequest:
+      type: object
+      required: [Type, Event]
+      properties:
+        Type:
+          type: string
+          enum: [pre-create, post-finish]
+        Event:
+          type: object
+          properties:
+            Upload:
+              type: object
+              properties:
+                ID: {type: string}
+                Size: {type: integer}
+                MetaData:
+                  type: object
+                  additionalProperties: {type: string}
+                Storage:
+                  type: object
+                  properties:
+                    Type: {type: string}
+                    Bucket: {type: string}
+                    Key: {type: string}
+    TusHookResponse:
+      type: object
+      properties:
+        RejectUpload: {type: boolean}
+        HTTPResponse:
+          type: object
+          properties:
+            StatusCode: {type: integer}
+            Body: {type: string}
+  responses:
+    Unauthenticated:
+      description: Token ausente, inválido, expirado ou com `iss`/`aud` diferentes da configuração
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    ValidationError:
+      description: Metadados inválidos (sha256 ausente ou malformado, tipo fora de zip/fit/tcx/gpx, consentimento ausente, recusado ou com categoria desconhecida)
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+          examples:
+            sha256Ausente:
+              value:
+                type: https://contracts.athlete-training-platform.example/problems/validation
+                title: Metadados inválidos
+                status: 422
+                errors:
+                  - campo: sha256
+                    mensagem: O campo sha256 é obrigatório.
+    NotFound:
+      description: Importação inexistente
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}

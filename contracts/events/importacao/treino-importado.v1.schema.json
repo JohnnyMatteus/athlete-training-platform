@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.athlete-training-platform.example/events/importacao/treino-importado.v1.schema.json",
+  "title": "TreinoImportado",
+  "description": "Uma atividade nova foi gravada. Publicado pelo worker, uma vez por atividade criada (duplicadas não geram evento).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "tipo",
+    "versao",
+    "ocorrido_em",
+    "import_id",
+    "dados"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Consumidores deduplicam por ele (entrega pelo menos uma vez)."
+    },
+    "tipo": {
+      "const": "TreinoImportado"
+    },
+    "versao": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível cria um arquivo .v2."
+    },
+    "ocorrido_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante UTC em que o fato ocorreu."
+    },
+    "import_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Lote de importação ao qual o evento pertence."
+    },
+    "dados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "atleta_id",
+        "atividade_id",
+        "tipo",
+        "fonte",
+        "inicio_utc",
+        "duracao_s",
+        "distancia_m",
+        "quantidade_amostras"
+      ],
+      "properties": {
+        "atleta_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "atividade_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "tipo": {
+          "type": "string",
+          "enum": [
+            "natacao_piscina",
+            "natacao_aguas_abertas",
+            "ciclismo_indoor",
+            "ciclismo_outdoor",
+            "corrida",
+            "forca",
+            "outro"
+          ]
+        },
+        "fonte": {
+          "type": "string",
+          "enum": [
+            "apple_export",
+            "healthkit",
+            "fit",
+            "tcx",
+            "gpx",
+            "intervals"
+          ]
+        },
+        "inicio_utc": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "duracao_s": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distancia_m": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "quantidade_amostras": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

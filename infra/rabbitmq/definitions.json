@@ -1,0 +1,138 @@
+{
+  "rabbit_version": "3.13",
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "importacao",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "importacao.dlx",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "metricas",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "ingest.importacao-recebida",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "api.importacao-resultado",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "metrics.treino-importado",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "metrics.atividade-corrigida",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "importacao.dlx"
+      }
+    },
+    {
+      "name": "importacao.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "importacao",
+      "vhost": "/",
+      "destination": "ingest.importacao-recebida",
+      "destination_type": "queue",
+      "routing_key": "importacao.recebida",
+      "arguments": {}
+    },
+    {
+      "source": "importacao",
+      "vhost": "/",
+      "destination": "api.importacao-resultado",
+      "destination_type": "queue",
+      "routing_key": "importacao.concluida",
+      "arguments": {}
+    },
+    {
+      "source": "importacao",
+      "vhost": "/",
+      "destination": "api.importacao-resultado",
+      "destination_type": "queue",
+      "routing_key": "importacao.falhou",
+      "arguments": {}
+    },
+    {
+      "source": "importacao",
+      "vhost": "/",
+      "destination": "metrics.treino-importado",
+      "destination_type": "queue",
+      "routing_key": "treino.importado",
+      "arguments": {}
+    },
+    {
+      "source": "importacao",
+      "vhost": "/",
+      "destination": "metrics.atividade-corrigida",
+      "destination_type": "queue",
+      "routing_key": "atividade.corrigida",
+      "arguments": {}
+    },
+    {
+      "source": "importacao.dlx",
+      "vhost": "/",
+      "destination": "importacao.dlq",
+      "destination_type": "queue",
+      "routing_key": "",
+      "arguments": {}
+    }
+  ]
+}

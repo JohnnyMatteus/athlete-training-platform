@@ -1,0 +1,29 @@
+name: Ingest load
+
+# Teste de carga da ingestão (M1-14). Manual de propósito: gera exports de até 1 GB.
+on:
+  workflow_dispatch:
+    inputs:
+      sizes_mb:
+        description: Tamanhos de export.xml em MB, separados por vírgula
+        default: "100,500,1024"
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: services/ingest/go.mod
+          cache-dependency-path: services/ingest/go.sum
+      - name: Carga
+        working-directory: services/ingest
+        env:
+          LOAD_SIZES_MB: ${{ inputs.sizes_mb }}
+        run: go test -tags=load -timeout 50m -v ./test/load | tee load.log
+      - name: Resumo
+        if: always()
+        run: |
+          { echo '## Carga da ingestão'; echo "Runner: $(nproc) vCPU, $(free -g | awk '/Mem/{print $2}') GB RAM"; echo '```'; grep RESULTADO services/ingest/load.log || true; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
