@@ -35,6 +35,7 @@ psql_ -d atividades -c 'CREATE EXTENSION IF NOT EXISTS timescaledb;' >/dev/null
 
 migrate_ importacao up
 migrate_ atividades up
+migrate_ metricas up
 
 assert "$(psql_ -d atividades -c "SELECT hypertable_name FROM timescaledb_information.hypertables")" amostra "amostra é hypertable"
 assert "$(psql_ -d atividades -c "SELECT count(*) FROM timescaledb_information.dimensions WHERE column_name='ts'")" 1 "particionada por ts"
@@ -48,11 +49,22 @@ fi
 assert "$(psql_ -d importacao -c "SELECT count(*) FROM information_schema.columns WHERE table_name='lote_importacao'
   AND column_name IN ('import_id','atleta_id','sha256','tipo_arquivo','status','versao_formato','importadas','duplicadas','erros')")" 9 "colunas do lote"
 
+assert "$(psql_ -d metricas -c "SELECT count(*) FROM information_schema.columns WHERE table_name='carga_diaria'
+  AND column_name IN ('atleta_id','dia','tss','ctl','atl','tsb')")" 6 "colunas de carga_diaria"
+psql_ -d metricas -c "INSERT INTO limiar VALUES ('2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01', 'ftp', 250, '2026-01-01')" >/dev/null
+if psql_ -d metricas -c "INSERT INTO limiar VALUES ('2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01', 'ftp', 260, '2026-01-01')" >/dev/null 2>&1; then
+  echo "FALHOU: limiar duplicado na mesma data foi aceito"; exit 1
+fi
+
+migrate_ metricas down -all
 migrate_ atividades down -all
 migrate_ importacao down -all
 assert "$(psql_ -d atividades -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations'")" 0 "atividades vazio após rollback"
 assert "$(psql_ -d importacao -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations'")" 0 "importacao vazio após rollback"
 
+assert "$(psql_ -d metricas -c "SELECT count(*) FROM pg_tables WHERE schemaname='public' AND tablename<>'schema_migrations'")" 0 "metricas vazio após rollback"
+
 migrate_ importacao up
 migrate_ atividades up
+migrate_ metricas up
 echo "migrações ok"

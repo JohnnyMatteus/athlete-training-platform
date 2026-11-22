@@ -121,7 +121,8 @@ services:
     command:
       - >
         migrate -path /migrations/importacao -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/importacao?sslmode=disable" up &&
-        migrate -path /migrations/atividades -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/atividades?sslmode=disable" up
+        migrate -path /migrations/atividades -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/atividades?sslmode=disable" up &&
+        migrate -path /migrations/metricas -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/metricas?sslmode=disable" up
     restart: "no"
     networks: [atp]
 

@@ -6,6 +6,8 @@ Fonte da verdade dos contratos entre serviços. Mudar um contrato aqui exige atu
 | --- | --- |
 | `events/importacao/*.v1.schema.json` | JSON Schema (2020-12) dos eventos de Importação |
 | `events/importacao/examples/*.json` | Exemplo válido de cada evento (o CI valida contra o esquema) |
+| `events/atividades/*.v1.schema.json` | `AtividadeCorrigida` (envelope sem `import_id`; publicado na exchange `importacao`) |
+| `events/metricas/*.v1.schema.json` | `MetricasCalculadas` (exchange `metricas`, envelope sem `import_id`) |
 | `asyncapi.yaml` | Canais e operações dos eventos no RabbitMQ |
 | `openapi/imports.yaml` | API HTTP de importação (`POST /imports`, `GET /imports/{id}`, hook do tusd) |
 
@@ -20,9 +22,11 @@ Propriedades AMQP da mensagem: `content_type: application/json`, `delivery_mode:
 | Evento | Exchange | Routing key | Publicado por | Fila consumidora |
 | --- | --- | --- | --- | --- |
 | ImportacaoRecebida | `importacao` (topic) | `importacao.recebida` | API | `ingest.importacao-recebida` |
-| TreinoImportado | `importacao` | `treino.importado` | worker | (M2) |
+| TreinoImportado | `importacao` | `treino.importado` | worker | `metrics.treino-importado` |
 | ImportacaoConcluida | `importacao` | `importacao.concluida` | worker | `api.importacao-resultado` |
 | ImportacaoFalhou | `importacao` | `importacao.falhou` | API ou worker | `api.importacao-resultado` |
+| AtividadeCorrigida | `importacao` | `atividade.corrigida` | contexto de Atividades (ainda sem publicador) | `metrics.atividade-corrigida` |
+| MetricasCalculadas | `metricas` (topic) | `metricas.calculadas` | serviço de métricas | (nenhuma ainda) |
 
 Filas são quorum, duráveis, com `x-dead-letter-exchange=importacao.dlx`. Consumidor que não consegue processar rejeita sem requeue (`basic.nack`, `requeue=false`) e a mensagem cai em `importacao.dlq`.
 

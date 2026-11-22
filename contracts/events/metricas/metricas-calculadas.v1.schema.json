@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.athlete-training-platform.example/events/metricas/metricas-calculadas.v1.schema.json",
+  "title": "MetricasCalculadas",
+  "description": "A carga de uma atividade foi calculada e a carga diária recalculada. Publicado pelo serviço de métricas, uma vez por TreinoImportado ou AtividadeCorrigida processado.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "tipo",
+    "versao",
+    "ocorrido_em",
+    "dados"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Consumidores deduplicam por ele (entrega pelo menos uma vez)."
+    },
+    "tipo": {
+      "const": "MetricasCalculadas"
+    },
+    "versao": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível cria um arquivo .v2."
+    },
+    "ocorrido_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante UTC em que o fato ocorreu."
+    },
+    "dados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "atleta_id",
+        "atividade_id",
+        "metodo",
+        "tss",
+        "np",
+        "fator_intensidade",
+        "descartes_fc",
+        "descartes_potencia",
+        "recalculado_desde",
+        "recalculado_ate",
+        "ctl",
+        "atl",
+        "tsb"
+      ],
+      "properties": {
+        "atleta_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "atividade_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "metodo": {
+          "type": "string",
+          "enum": [
+            "tss_potencia",
+            "rtss",
+            "stss",
+            "trimp",
+            "indisponivel"
+          ]
+        },
+        "tss": {
+          "type": "number",
+          "minimum": 0
+        },
+        "np": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "fator_intensidade": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "descartes_fc": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "descartes_potencia": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "recalculado_desde": {
+          "type": "string",
+          "format": "date",
+          "description": "Primeiro dia de carga_diaria reescrito."
+        },
+        "recalculado_ate": {
+          "type": "string",
+          "format": "date"
+        },
+        "ctl": {
+          "type": "number",
+          "description": "CTL no último dia recalculado."
+        },
+        "atl": {
+          "type": "number"
+        },
+        "tsb": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}
