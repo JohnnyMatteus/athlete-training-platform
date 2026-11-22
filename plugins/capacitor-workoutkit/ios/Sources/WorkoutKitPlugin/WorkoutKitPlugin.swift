@@ -62,6 +62,30 @@ public class WorkoutKitPlugin: CAPPlugin, CAPBridgedPlugin {
         String(format: "%04d-%02d-%02dT%02d:%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0, c.hour ?? 0, c.minute ?? 0)
     }
 
+    /// `schedule` não lança nem devolve resultado: o WorkoutKit pode descartar o treino sem avisar (limite de
+    /// quantidade, janela, autorização). A única prova é reler `scheduledWorkouts` depois.
+    @available(iOS 17.0, *)
+    private func scheduleVerified(_ plan: WorkoutPlan, at date: DateComponents) async throws {
+        guard WorkoutScheduler.isSupported else { throw WorkoutKitUnsupported.notSupportedOnDevice }
+        let id = plan.id.uuidString.lowercased()
+        let wanted = String(local(date).prefix(10)) // compara o dia: o sistema pode normalizar hora e minuto
+        await WorkoutScheduler.shared.schedule(plan, at: date)
+        let now = await WorkoutScheduler.shared.scheduledWorkouts
+        guard now.contains(where: { $0.plan.id.uuidString.lowercased() == id && local($0.date).hasPrefix(wanted) }) else {
+            throw SchedulingError.notPersisted(id: id, date: wanted)
+        }
+    }
+
+    private enum SchedulingError: Error, CustomStringConvertible {
+        case notPersisted(id: String, date: String)
+        var description: String {
+            switch self {
+            case .notPersisted(let id, let date):
+                return "O WorkoutScheduler não registrou o treino \(id) em \(date) (limite, janela ou autorização)."
+            }
+        }
+    }
+
     @objc func requestAuthorization(_ call: CAPPluginCall) {
         guard #available(iOS 17.0, *) else { return call.unavailable("Requer iOS 17.") }
         Task {
@@ -80,7 +104,7 @@ public class WorkoutKitPlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             do {
                 let plan = try WorkoutKitMapper.plan(from: try blueprint(call.getObject("plan")))
-                try await WorkoutScheduler.shared.schedule(plan, at: date)
+                try await scheduleVerified(plan, at: date)
                 call.resolve(["id": plan.id.uuidString.lowercased()])
             } catch { call.reject("Falha ao agendar: \(error)") }
         }
@@ -146,7 +170,7 @@ public class WorkoutKitPlugin: CAPPlugin, CAPBridgedPlugin {
                 guard let (plan, date) = plans[id], let dc = components(date) else { continue }
                 do {
                     let wk = try WorkoutKitMapper.plan(from: try blueprint(plan))
-                    try await WorkoutScheduler.shared.schedule(wk, at: dc)
+                    try await scheduleVerified(wk, at: dc)
                     added.append(id)
                 } catch { failed.append(["id": id, "reason": "\(error)"]) }
             }

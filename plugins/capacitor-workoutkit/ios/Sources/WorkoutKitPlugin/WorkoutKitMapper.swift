@@ -6,34 +6,69 @@ import WorkoutKitCore
 
 // Mapeia o modelo neutro (já validado pelo núcleo) para os tipos do WorkoutKit (iOS 17+).
 // Não compilado no ambiente de desenvolvimento (sem Xcode): roda só no CI macOS e no aparelho.
+/// O WorkoutKit recusa em silêncio o que não suporta; por isso o mapeador confere antes de montar o treino.
+enum WorkoutKitUnsupported: Error, CustomStringConvertible {
+    case activity(String)
+    case goal(String, sport: String)
+    case alert(String, sport: String)
+    case notSupportedOnDevice
+
+    var description: String {
+        switch self {
+        case .activity(let s): return "O WorkoutKit não suporta a modalidade \(s)."
+        case .goal(let g, let s): return "O WorkoutKit não suporta o objetivo \(g) em \(s)."
+        case .alert(let a, let s): return "O WorkoutKit não suporta o alvo \(a) em \(s)."
+        case .notSupportedOnDevice: return "WorkoutScheduler.isSupported é falso neste aparelho."
+        }
+    }
+}
+
 @available(iOS 17.0, *)
 enum WorkoutKitMapper {
     static func plan(from bp: WorkoutBlueprint) throws -> WorkoutPlan {
         guard let id = UUID(uuidString: bp.id) else { throw TranslationError.invalidId(bp.id) }
+        let kind = activity(bp.sport)
+        let place = location(bp.place)
+        guard CustomWorkout.supportsActivity(kind) else { throw WorkoutKitUnsupported.activity("\(bp.sport)") }
+        let ctx = Context(activity: kind, location: place, sport: "\(bp.sport)")
         let workout = CustomWorkout(
-            activity: activity(bp.sport),
-            location: location(bp.place),
+            activity: kind,
+            location: place,
             displayName: bp.name,
-            warmup: bp.warmup.map(step),
-            blocks: bp.blocks.map(block),
-            cooldown: bp.cooldown.map(step)
+            warmup: try bp.warmup.map { try step($0, ctx) },
+            blocks: try bp.blocks.map { try block($0, ctx) },
+            cooldown: try bp.cooldown.map { try step($0, ctx) }
         )
         return WorkoutPlan(.custom(workout), id: id)
     }
 
-    private static func block(_ b: BlueprintBlock) -> IntervalBlock {
+    private struct Context {
+        let activity: HKWorkoutActivityType
+        let location: HKWorkoutSessionLocationType
+        let sport: String
+    }
+
+    private static func block(_ b: BlueprintBlock, _ ctx: Context) throws -> IntervalBlock {
         IntervalBlock(
-            steps: b.intervals.map { IntervalStep($0.purpose == .work ? .work : .recovery, step: step($0.step)) },
+            steps: try b.intervals.map { IntervalStep($0.purpose == .work ? .work : .recovery, step: try step($0.step, ctx)) },
             iterations: b.iterations
         )
     }
 
-    private static func step(_ s: BlueprintStep) -> WorkoutStep {
+    private static func step(_ s: BlueprintStep, _ ctx: Context) throws -> WorkoutStep {
+        let g = goal(s.goal)
+        guard CustomWorkout.supportsGoal(g, activity: ctx.activity, location: ctx.location) else {
+            throw WorkoutKitUnsupported.goal("\(s.goal)", sport: ctx.sport)
+        }
+        let a = alert(s.target)
+        if let a, !CustomWorkout.supportsAlert(a, activity: ctx.activity, location: ctx.location) {
+            throw WorkoutKitUnsupported.alert("\(String(describing: s.target))", sport: ctx.sport)
+        }
         // O nome do passo só existe a partir do iOS 18; no 17 o passo vai sem nome.
         if #available(iOS 18.0, *) {
-            return WorkoutStep(goal: goal(s.goal), alert: alert(s.target), displayName: s.name)
+            return WorkoutStep(goal: g, alert: a, displayName: s.name)
         }
-        return WorkoutStep(goal: goal(s.goal), alert: alert(s.target))
+        return WorkoutStep(goal: g, alert: a)
     }
 
     private static func goal(_ g: Goal) -> WorkoutGoal {
