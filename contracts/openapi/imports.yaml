@@ -8,8 +8,8 @@ info:
     O arquivo em si não passa por esta API: o cliente envia por upload resumível (protocolo tus,
     servidor `tusd` com backend S3/MinIO) e o `tusd` avisa a API pelos hooks HTTP descritos abaixo.
 
-    Autenticação e RBAC não fazem parte do M1: em desenvolvimento a API usa um atleta sintético
-    fixo vindo de configuração (`ATHLETE_ID`).
+    Autenticação por JWT RS256 (`Authorization: Bearer`), validado pela API (ADR 0011). A claim `sub`
+    é o `atleta_id`. Papéis (RBAC) não fazem parte do M1.
   license:
     name: MIT
     identifier: MIT
@@ -28,8 +28,11 @@ paths:
       operationId: createImport
       summary: Cria uma importação
       description: |
-        Cria o lote com status `aguardando_upload`. A idempotência é por atividade, não por arquivo:
-        o mesmo sha256 enviado de novo cria um novo lote.
+        Cria o lote com status `aguardando_upload` e registra o consentimento LGPD do atleta para
+        a importação (`consentimento.aceito` tem de ser `true`). A idempotência é por atividade, não
+        por arquivo: o mesmo sha256 enviado de novo cria um novo lote.
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -44,6 +47,10 @@ paths:
                   tamanho_bytes: 104857600
                   tipo_arquivo: zip
                   sha256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+                  consentimento:
+                    aceito: true
+                    versao_termo: '2026-11'
+                    categorias: [treinos, frequencia_cardiaca]
       responses:
         '201':
           description: Lote criado
@@ -63,6 +70,8 @@ paths:
                     upload_url: http://localhost:8080/files/
                     upload_metadata:
                       import_id: 3c1d2e4f-0b1a-4c2d-8e3f-9a8b7c6d5e40
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
         '422':
           $ref: '#/components/responses/ValidationError'
   /imports/{import_id}:
@@ -70,9 +79,13 @@ paths:
       tags: [importacoes]
       operationId: getImport
       summary: Consulta status e totais de uma importação
+      security:
+        - bearerAuth: []
       parameters:
         - $ref: '#/components/parameters/ImportId'
       responses:
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
         '200':
           description: Lote encontrado
           content:
@@ -101,13 +114,15 @@ paths:
     post:
       tags: [hooks]
       operationId: tusHook
+      security: []  # chamada interna do tusd: sem JWT; o segredo do hook (TUSD_HOOK_SECRET) fica fora do contrato
       summary: Hook HTTP do tusd
       description: |
         Chamado pelo `tusd` (`-hooks-http`) nos eventos `pre-create` e `post-finish`.
 
-        - `pre-create`: o cliente deve enviar `import_id` em `Upload-Metadata`. Se o lote não existe
-          ou não está em `aguardando_upload` (concluído, falhou ou expirado), a resposta rejeita o
-          upload (`RejectUpload: true`).
+        - `pre-create`: o cliente deve enviar `import_id` em `Upload-Metadata` e o JWT em
+          `Authorization` (o tusd encaminha o cabeçalho com `-hooks-http-forward-headers`). Se o lote
+          não existe, não é do atleta do token ou não está em `aguardando_upload` (concluído, falhou
+          ou expirado), a resposta rejeita o upload (`RejectUpload: true`).
         - `post-finish`: a API confere o sha256 do objeto. Se bater, o lote passa a `recebido` e
           `ImportacaoRecebida` entra na outbox; se não, o lote passa a `falhou` e `ImportacaoFalhou`
           entra na outbox.
@@ -127,6 +142,12 @@ paths:
               schema:
                 $ref: '#/components/schemas/TusHookResponse'
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT RS256 emitido pelo provedor de identidade; `sub` em UUID é o atleta.
   parameters:
     ImportId:
       name: import_id
@@ -146,7 +167,7 @@ components:
     CreateImportRequest:
       type: object
       additionalProperties: false
-      required: [nome_arquivo, tamanho_bytes, tipo_arquivo, sha256]
+      required: [nome_arquivo, tamanho_bytes, tipo_arquivo, sha256, consentimento]
       properties:
         nome_arquivo: {type: string, minLength: 1, maxLength: 255}
         tamanho_bytes: {type: integer, minimum: 1}
@@ -155,6 +176,29 @@ components:
           type: string
           pattern: '^[0-9a-f]{64}$'
           description: sha256 do arquivo em hexadecimal minúsculo
+        consentimento: {$ref: '#/components/schemas/Consent'}
+    Consent:
+      type: object
+      description: Consentimento LGPD explícito e granular por categoria de dado (ADR 0008). Gravado no lote.
+      additionalProperties: false
+      required: [aceito, versao_termo, categorias]
+      properties:
+        aceito:
+          type: boolean
+          const: true
+          description: Tem de ser `true`; a API rejeita a importação sem consentimento explícito.
+        versao_termo:
+          type: string
+          minLength: 1
+          maxLength: 32
+          description: Versão do termo de consentimento apresentada ao atleta
+        categorias:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+            enum: [treinos, frequencia_cardiaca, localizacao, potencia]
     CreateImportResponse:
       type: object
       required: [import_id, status, upload_url, upload_metadata]
@@ -239,8 +283,13 @@ components:
             StatusCode: {type: integer}
             Body: {type: string}
   responses:
+    Unauthenticated:
+      description: Token ausente, inválido, expirado ou com `iss`/`aud` diferentes da configuração
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
     ValidationError:
-      description: Metadados inválidos (sha256 ausente ou malformado, tipo fora de zip/fit/tcx/gpx)
+      description: Metadados inválidos (sha256 ausente ou malformado, tipo fora de zip/fit/tcx/gpx, consentimento ausente, recusado ou com categoria desconhecida)
       content:
         application/problem+json:
           schema: {$ref: '#/components/schemas/Problem'}
