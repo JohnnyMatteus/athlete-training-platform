@@ -95,3 +95,9 @@ func FitOtherVendor() []byte {
 	return buildFit(fitSpec{manufacturer: typedef.ManufacturerWahooFitness, product: "Bike Ficticio",
 		sport: typedef.SportCycling, sub: typedef.SubSportGeneric, start: Base, seconds: 1800, step: 5, power: true})
 }
+
+// FitBikePowerAt é o pedal com potência começando em start (para casar com outro registro do mesmo treino).
+func FitBikePowerAt(start time.Time) []byte {
+	return buildFit(fitSpec{manufacturer: typedef.ManufacturerGarmin, product: "Ciclocomputador Ficticio",
+		sport: typedef.SportCycling, sub: typedef.SubSportRoad, start: start, seconds: 3600, step: 5, power: true})
+}

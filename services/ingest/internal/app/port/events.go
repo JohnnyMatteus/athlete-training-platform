@@ -18,6 +18,7 @@ type Event struct {
 }
 
 const (
+	EventImportReceived   = "ImportacaoRecebida"
 	EventActivityImported = "TreinoImportado"
 	EventImportDone       = "ImportacaoConcluida"
 	EventImportFailed     = "ImportacaoFalhou"

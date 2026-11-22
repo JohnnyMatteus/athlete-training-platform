@@ -179,9 +179,16 @@ func b2i(b bool) int {
 func ZipExportXML(xml string) []byte {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
-	w, _ := zw.CreateHeader(&zip.FileHeader{Name: "apple_health_export/export.xml", Method: zip.Deflate, Modified: Base})
-	io.WriteString(w, xml)
-	zw.Close()
+	w, err := zw.CreateHeader(&zip.FileHeader{Name: "apple_health_export/export.xml", Method: zip.Deflate, Modified: Base})
+	if err == nil {
+		_, err = io.WriteString(w, xml)
+	}
+	if err == nil {
+		err = zw.Close()
+	}
+	if err != nil {
+		panic(err)
+	}
 	return buf.Bytes()
 }
 

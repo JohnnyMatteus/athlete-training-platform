@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -21,6 +20,7 @@ import (
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/domain/activity"
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/testkit/collect"
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/testkit/fixtures"
+	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/testkit/memprobe"
 )
 
 var athlete = uuid.MustParse("00000000-0000-0000-0000-000000000001")
@@ -129,7 +129,7 @@ func (d *discardSink) Samples(_ context.Context, _ activity.ID, b []activity.Sam
 func TestConstantMemory(t *testing.T) {
 	big := int64(30)
 	if v := strings.TrimSpace(os.Getenv("LOAD_MB")); v != "" {
-		fmt.Sscan(v, &big)
+		_, _ = fmt.Sscan(v, &big)
 	}
 	small := max(big/5, 5)
 
@@ -146,42 +146,10 @@ func measure(t *testing.T, xmlBytes int64) uint64 {
 	t.Helper()
 	var zipBuf bytes.Buffer
 	require.NoError(t, fixtures.WriteAppleExport(&zipBuf, fixtures.AppleOptions{Seed: 7, TargetXMLBytes: xmlBytes}))
-	src := collect.Bytes(zipBuf.Bytes())
-	zipSize := zipBuf.Len()
-	zipBuf.Reset() // não conta o arquivo na medição: ele é a entrada, não a memória do parser
-
-	runtime.GC()
-	var base runtime.MemStats
-	runtime.ReadMemStats(&base)
-	stop := make(chan struct{})
-	peak := make(chan uint64)
-	go func() {
-		var max uint64
-		tick := time.NewTicker(20 * time.Millisecond)
-		defer tick.Stop()
-		for {
-			select {
-			case <-stop:
-				peak <- max
-				return
-			case <-tick.C:
-				var m runtime.MemStats
-				runtime.ReadMemStats(&m)
-				if m.HeapAlloc > max {
-					max = m.HeapAlloc
-				}
-			}
-		}
-	}()
+	src := collect.Bytes(zipBuf.Bytes()) // a entrada fica fora da medição: o pico é medido sobre o valor inicial
 	sink := &discardSink{}
-	_, err := translate(src, sink)
-	close(stop)
-	p := <-peak
+	peak, err := memprobe.Peak(func() error { _, err := translate(src, sink); return err })
 	require.NoError(t, err)
 	require.Greater(t, sink.samples.Load(), int64(1000))
-	_ = zipSize
-	if p < base.HeapAlloc {
-		return 0
-	}
-	return p - base.HeapAlloc
+	return peak
 }
