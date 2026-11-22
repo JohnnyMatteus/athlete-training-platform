@@ -26,7 +26,7 @@ make contracts-check         # esquemas, OpenAPI, AsyncAPI
 
 ## Estrutura
 
-`services/{api,ingest,metrics,coach}`, `app/`, `plugins/capacitor-workoutkit`, `contracts/`, `infra/`, `docs/` (design doc, `adr/`, `issues/`, `roteiros/`). Convenções por serviço em `services/README.md`.
+`services/{api,planning,ingest,metrics,coach}`, `app/`, `plugins/capacitor-workoutkit`, `contracts/`, `infra/`, `docs/` (design doc, `adr/`, `issues/`, `roteiros/`). Convenções por serviço em `services/README.md`.
 
 ## Fluxo de trabalho
 

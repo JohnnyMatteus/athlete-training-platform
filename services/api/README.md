@@ -17,3 +17,5 @@ Hook do tusd: o cliente envia `import_id` em `Upload-Metadata` e `Authorization:
 Contrato e migrações: coluna `consentimento` em `lote_importacao` (migração 000003) e `consentimento` obrigatório no `POST /imports`; autenticação JWT no lugar do `ATHLETE_ID` (ADR 0011).
 
 Testes: `composer install --ignore-platform-req=ext-swoole && composer test` (unitários, sem Docker). `composer lint` roda php-cs-fixer e PHPStan nível 6.
+
+Observabilidade (ADR 0018): `TraceMiddleware` abre o span de cada requisição, a outbox grava o `traceparent` (coluna nova, migração 000004) e o relay o publica como cabeçalho AMQP; o hook `post-finish` do tusd retoma o trace guardado no lote. `OTEL_EXPORTER_OTLP_ENDPOINT` liga a exportação. Workers (`outbox:relay`, `importacao:consume-results`) rodam como serviços próprios no compose, com `worker:health` como healthcheck (banco, broker e atraso da outbox; `WORKER_HEALTH_MAX_LAG`).

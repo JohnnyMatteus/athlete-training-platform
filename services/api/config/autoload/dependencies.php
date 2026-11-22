@@ -8,6 +8,7 @@ use App\Application\Import\CreateImport;
 use App\Application\Port\Authenticator;
 use App\Application\Port\EventOutbox;
 use App\Application\Port\ImportBatchRepository;
+use App\Application\Port\ImportTraceStore;
 use App\Application\Port\ObjectChecksum;
 use App\Application\Port\Transaction;
 use App\Infrastructure\Acl\JwtAuthenticator;
@@ -18,6 +19,7 @@ use App\Infrastructure\Messaging\PgEventOutbox;
 use App\Infrastructure\Messaging\PgOutboxStore;
 use App\Infrastructure\Persistence\HyperfTransaction;
 use App\Infrastructure\Persistence\PgImportBatchRepository;
+use App\Infrastructure\Persistence\PgImportTraceStore;
 use App\Infrastructure\Persistence\S3ObjectChecksum;
 use App\Interfaces\Http\TusdHookController;
 use Aws\S3\S3Client;
@@ -29,6 +31,7 @@ return [
     ImportBatchRepository::class => static fn () => new PgImportBatchRepository(
         new DateInterval((string) env('IMPORT_UPLOAD_TTL', 'PT24H')),
     ),
+    ImportTraceStore::class => PgImportTraceStore::class,
     EventOutbox::class => PgEventOutbox::class,
     OutboxStore::class => PgOutboxStore::class,
     Transaction::class => HyperfTransaction::class,
@@ -74,6 +77,7 @@ return [
         $c->get(AuthorizeUpload::class),
         $c->get(ConfirmUpload::class),
         $c->get(Authenticator::class),
+        $c->get(ImportTraceStore::class),
         (string) env('TUSD_HOOK_SECRET', ''),
     ),
 ];

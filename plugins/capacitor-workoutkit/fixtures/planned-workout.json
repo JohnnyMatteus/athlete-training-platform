@@ -1,0 +1,17 @@
+{
+  "id": "5b1f0c2e-7a64-4f43-9d0e-2f6f6f8a1c11",
+  "nome": "Intervalado de limiar",
+  "modalidade": "corrida",
+  "ambiente": "outdoor",
+  "aquecimento": { "tipo": "aquecimento", "objetivo": { "tipo": "tempo", "segundos": 600 }, "alvo": { "tipo": "zona_fc", "zona": 2 } },
+  "blocos": [
+    {
+      "repeticoes": 4,
+      "passos": [
+        { "tipo": "trabalho", "nome": "Limiar", "objetivo": { "tipo": "distancia", "metros": 1000 }, "alvo": { "tipo": "velocidade_ms", "min": 3.5, "max": 3.8 } },
+        { "tipo": "recuperacao", "objetivo": { "tipo": "tempo", "segundos": 120 } }
+      ]
+    }
+  ],
+  "desaquecimento": { "tipo": "desaquecimento", "objetivo": { "tipo": "aberto" } }
+}

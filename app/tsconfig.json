@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "jsx": "preserve",
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "@capacitor/core": ["./node_modules/@capacitor/core"],
+      "vitest": ["./node_modules/vitest"],
+      "@atp/capacitor-workoutkit": ["../plugins/capacitor-workoutkit/src/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "../plugins/capacitor-workoutkit/src", "../plugins/capacitor-workoutkit/tests", "vite.config.ts", "capacitor.config.ts"]
+}

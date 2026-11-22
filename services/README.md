@@ -2,7 +2,8 @@
 
 | Diretório | Linguagem | Marco | Papel |
 | --- | --- | --- | --- |
-| `api` | PHP (Hyperf) | M1 | API HTTP, importação, outbox, hook do tusd; Planejamento no M4 |
+| `api` | PHP (Hyperf) | M1 | API HTTP, importação, outbox, hook do tusd |
+| `planning` | PHP (Hyperf) | M4 | Planejamento: periodização, validador, ajustes, aderência, export .fit, vínculo atleta-treinador |
 | `ingest` | Go | M1 | Worker de ingestão: tradutores, `COPY`, eventos |
 | `metrics` | Go | M2 | Métricas de carga |
 | `coach` | TypeScript | M6 | Coach de IA |

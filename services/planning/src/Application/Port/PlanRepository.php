@@ -1,0 +1,26 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Application\Port;
+
+use App\Domain\Plan\Plan;
+use App\Domain\Plan\Workout;
+
+interface PlanRepository
+{
+    /**
+     * Grava só se a revisão lida ainda é a corrente (plano novo tem revisão 0).
+     *
+     * @throws \App\Application\Conflict quando outro processo gravou o plano depois da leitura
+     */
+    public function save(Plan $plan): void;
+
+    public function find(string $id): ?Plan;
+
+    /** @return list<Plan> */
+    public function listByAthlete(string $athleteId): array;
+
+    /** @return array{plan: Plan, workout: Workout}|null */
+    public function findWorkout(string $workoutId): ?array;
+}

@@ -27,7 +27,7 @@ final class OutboxRelayTest extends TestCase
         };
         $publisher = new class () implements MessagePublisher {
             public array $published = [];
-            public function publish(string $routingKey, string $payload, string $messageId): void
+            public function publish(string $routingKey, string $payload, string $messageId, ?string $traceparent = null): void
             {
                 $this->published[] = [$routingKey, $messageId];
             }
@@ -52,7 +52,7 @@ final class OutboxRelayTest extends TestCase
             }
         };
         $publisher = new class () implements MessagePublisher {
-            public function publish(string $routingKey, string $payload, string $messageId): void
+            public function publish(string $routingKey, string $payload, string $messageId, ?string $traceparent = null): void
             {
                 if ($messageId === 'e2') {
                     throw new RuntimeException('broker fora');

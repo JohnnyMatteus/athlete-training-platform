@@ -69,11 +69,13 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD} &&
-      mc mb --ignore-existing local/$${UPLOADS_BUCKET}"
+      mc mb --ignore-existing local/$${UPLOADS_BUCKET} &&
+      (mc ilm rule ls local/$${UPLOADS_BUCKET} | grep -q expire || mc ilm rule add --expire-days $${UPLOADS_RETENTION_DAYS} local/$${UPLOADS_BUCKET})"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       UPLOADS_BUCKET: ${UPLOADS_BUCKET:-uploads}
+      UPLOADS_RETENTION_DAYS: ${UPLOADS_RETENTION_DAYS:-7}
     restart: "no"
     networks: [atp]
 
@@ -106,6 +108,16 @@ services:
       retries: 20
     networks: [atp]
 
+  # Traces OTLP (ADR 0018). UI em http://localhost:8123; OTLP/HTTP só na rede interna (4318).
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    profiles: [core]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "127.0.0.1:${JAEGER_UI_PORT:-8123}:16686"
+    networks: [atp]
+
   # API de importação. Valida o JWT com a chave pública em services/api/runtime/jwt_public.pem.
   api:
     build: ./services/api
@@ -117,7 +129,7 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-    environment:
+    environment: &api-env
       HTTP_PORT: 9501
       DB_HOST: postgres
       DB_DATABASE: importacao
@@ -133,6 +145,8 @@ services:
       JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
       JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: api
     volumes:
       - ./services/api/runtime:/run/jwt:ro
     ports:
@@ -145,8 +159,42 @@ services:
     restart: unless-stopped
     networks: [atp]
 
-  # Worker de ingestão: consome ImportacaoRecebida e roda o relay da outbox do banco atividades.
-  # Imagem distroless sem shell: não há healthcheck por comando; o worker não expõe HTTP.
+  # Workers da API sem HTTP: healthcheck por worker:health (banco, broker e atraso da outbox).
+  api-relay:
+    build: ./services/api
+    profiles: [core]
+    command: ["outbox:relay"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  api-consumer:
+    build: ./services/api
+    profiles: [core]
+    command: ["importacao:consume-results"]
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *api-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  # Worker de ingestão + HTTP de Atividades (amostras internas e correção, ADR 0015).
+  # Imagem distroless sem shell: o healthcheck é o próprio binário (-healthcheck).
+  # A porta 8122 fica só no loopback do host: /internal/** nunca deve passar por proxy ou gateway público.
   ingest:
     build: ./services/ingest
     profiles: [core]
@@ -166,6 +214,170 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       INGEST_MAX_ATTEMPTS: ${INGEST_MAX_ATTEMPTS:-3}
       INGEST_COPY_BATCH: ${INGEST_COPY_BATCH:-5000}
+      HTTP_ADDR: ":8122"
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: ingest
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "127.0.0.1:${INGEST_HTTP_PORT:-8122}:8122"
+    healthcheck:
+      test: ["CMD", "/worker", "-healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [atp]
+
+  # Serviço de métricas: consumidores, API de leitura e escrita de limiares (8121).
+  metrics:
+    build: ./services/metrics
+    profiles: [core]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      ingest:
+        condition: service_healthy
+    environment:
+      METRICS_DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/metricas?sslmode=disable
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      ATIVIDADES_BASE_URL: http://ingest:8122
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN}
+      HTTP_ADDR: ":8121"
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: metrics
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "${METRICS_HTTP_PORT:-8121}:8121"
+    healthcheck:
+      test: ["CMD", "/worker", "-healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [atp]
+
+  # Planejamento (Hyperf): API na 8120, relay da outbox e consumidor de métricas em processos próprios.
+  planning:
+    build: ./services/planning
+    profiles: [core]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment: &planning-env
+      HTTP_PORT: 8120
+      DB_HOST: postgres
+      DB_DATABASE: planejamento
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: planning
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "${PLANNING_HTTP_PORT:-8120}:8120"
+    healthcheck:
+      test: ["CMD", "php", "-r", "exit(@file_get_contents('http://127.0.0.1:8120/health') === false ? 1 : 0);"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [atp]
+
+
+  # Workers sem HTTP: o healthcheck é o comando worker:health (processo vivo e broker/banco alcançáveis).
+  planning-relay:
+    build: ./services/planning
+    profiles: [core]
+    command: ["outbox:relay"]
+    depends_on:
+      planning:
+        condition: service_healthy
+    environment: *planning-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  planning-consumer:
+    build: ./services/planning
+    profiles: [core]
+    command: ["planejamento:consume-metricas"]
+    depends_on:
+      planning:
+        condition: service_healthy
+    environment: *planning-env
+    healthcheck:
+      test: ["CMD", "php", "bin/hyperf.php", "worker:health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  # Estado do Coach IA: propostas pendentes e orçamento diário de tokens (ADR 0025).
+  # Sem porta no host e sem senha: só a rede interna alcança; quem escreve aqui forja proposta pendente.
+  redis:
+    image: redis:7.4.1-alpine
+    profiles: [coach]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [atp]
+
+  # Coach IA (LangGraph + MCP). Lê métricas e planejamento por HTTP com o JWT do usuário (ADR 0021).
+  # Profile próprio `coach`: sem ANTHROPIC_API_KEY o processo recusa subir (não há modelo simulado), então fica fora do `make up`.
+  # Uso: docker compose --profile coach --env-file .env up -d redis coach
+  coach:
+    build: ./services/coach
+    profiles: [coach]
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      COACH_PORT: 8130
+      REDIS_URL: redis://redis:6379
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      METRICS_URL: ${METRICS_URL:-http://metrics:8121}
+      PLANNING_URL: ${PLANNING_URL:-http://planning:8120}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      COACH_LLM_MODEL: ${COACH_LLM_MODEL:-}
+      COACH_DAILY_TOKEN_BUDGET: ${COACH_DAILY_TOKEN_BUDGET:-60000}
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "${COACH_PORT:-8130}:8130"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8130/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
     networks: [atp]
 
@@ -186,7 +398,8 @@ services:
       - >
         migrate -path /migrations/importacao -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/importacao?sslmode=disable" up &&
         migrate -path /migrations/atividades -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/atividades?sslmode=disable" up &&
-        migrate -path /migrations/metricas -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/metricas?sslmode=disable" up
+        migrate -path /migrations/metricas -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/metricas?sslmode=disable" up &&
+        migrate -path /migrations/planejamento -database "postgres://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/planejamento?sslmode=disable" up
     restart: "no"
     networks: [atp]
 

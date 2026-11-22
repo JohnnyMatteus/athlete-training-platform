@@ -3,7 +3,7 @@ COMPOSE := docker compose --profile core --profile tools
 ENV_FILE := $(if $(wildcard .env),.env,.env.example)
 DC := $(COMPOSE) --env-file $(ENV_FILE)
 
-.PHONY: help env up down logs ps migrate migrate-test lint test test-integration contracts-check clean
+.PHONY: dev-keys help env up down logs ps migrate migrate-test lint test test-integration contracts-check clean
 
 help: ## Lista os alvos
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -11,7 +11,10 @@ help: ## Lista os alvos
 env: ## Cria .env a partir de .env.example
 	@test -f .env || cp .env.example .env
 
-up: env ## Sobe Postgres+Timescale, RabbitMQ, MinIO e tusd
+dev-keys: ## Gera o par de chaves JWT de desenvolvimento (token: infra/scripts/dev-jwt.sh token)
+	./infra/scripts/dev-jwt.sh keys
+
+up: env dev-keys ## Sobe Postgres+Timescale, RabbitMQ, MinIO e tusd
 	$(DC) up -d --wait postgres rabbitmq minio minio-init tusd
 
 down: ## Para a infraestrutura (mantém volumes)
@@ -31,13 +34,17 @@ migrate-test: ## Valida migrações (up, esquema, down, up) num Postgres descart
 
 lint: ## Lint dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer lint); fi
+	@if [ -f services/planning/composer.json ]; then (cd services/planning && composer lint); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go vet ./... && golangci-lint run); fi
 	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go vet ./... && golangci-lint run); fi
+	@if [ -f services/coach/package.json ]; then (cd services/coach && npm run lint); fi
 
 test: ## Testes unitários dos serviços presentes
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test); fi
+	@if [ -f services/planning/composer.json ]; then (cd services/planning && composer test); fi
 	@if [ -f services/ingest/go.mod ]; then (cd services/ingest && go test ./...); fi
 	@if [ -f services/metrics/go.mod ]; then (cd services/metrics && go test ./...); fi
+	@if [ -f services/coach/package.json ]; then (cd services/coach && npm test && npm run test:evals); fi
 
 test-integration: ## Testes de integração (Testcontainers; exigem Docker)
 	@if [ -f services/api/composer.json ]; then (cd services/api && composer test:integration); fi
@@ -52,7 +59,7 @@ contracts-check: ## Valida esquemas, exemplos e OpenAPI/AsyncAPI
 	uvx check-jsonschema==0.30.0 --schemafile contracts/events/atividades/atividade-corrigida.v1.schema.json contracts/events/atividades/examples/atividade-corrigida.v1.json
 	for n in metricas/metricas-calculadas metricas/limiar-atualizado planejamento/plano-gerado planejamento/treino-planejado planejamento/plano-ajustado atleta/vinculo-consentido atleta/vinculo-revogado; do \
 	  uvx check-jsonschema==0.30.0 --schemafile contracts/events/$$n.v1.schema.json contracts/events/$$(dirname $$n)/examples/$$(basename $$n).v1.json; done
-	for f in imports planejamento metricas atividades; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$$f.yaml; done
+	for f in imports planejamento metricas atividades coach-ports; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$$f.yaml; done
 	npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
 
 clean: ## Remove containers e volumes

@@ -5,6 +5,8 @@ package postgres_test
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"sort"
 	"testing"
 	"time"
 
@@ -36,10 +38,17 @@ func setup(t *testing.T) *pgxpool.Pool {
 	require.NoError(t, err)
 	t.Cleanup(pool.Close)
 
-	sql, err := os.ReadFile("../../../../../infra/db/migrations/metricas/000001_carga.up.sql")
+	// todas as migrações do banco, em ordem: a fonte do esquema é o diretório, não um arquivo
+	files, err := filepath.Glob("../../../../../infra/db/migrations/metricas/*.up.sql")
 	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(sql))
-	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	sort.Strings(files)
+	for _, f := range files {
+		sql, err := os.ReadFile(f)
+		require.NoError(t, err)
+		_, err = pool.Exec(ctx, string(sql))
+		require.NoError(t, err, f)
+	}
 	return pool
 }
 

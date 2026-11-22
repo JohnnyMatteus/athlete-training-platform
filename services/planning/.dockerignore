@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+tests
+runtime
+vendor
+phpunit.xml.dist
+phpstan.neon
+.php-cs-fixer.dist.php
+Dockerfile
+README.md

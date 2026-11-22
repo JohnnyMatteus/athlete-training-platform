@@ -19,7 +19,7 @@ final readonly class OutboxRelay
         $sent = 0;
         foreach ($this->store->pending($this->batchSize) as $row) {
             try {
-                $this->publisher->publish($row['routing_key'], $row['payload'], $row['event_id']);
+                $this->publisher->publish($row['routing_key'], $row['payload'], $row['event_id'], $row['traceparent'] ?? null);
             } catch (Throwable) {
                 break;
             }

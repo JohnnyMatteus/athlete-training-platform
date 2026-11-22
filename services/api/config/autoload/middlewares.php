@@ -2,4 +2,4 @@
 
 declare(strict_types=1);
 
-return ['http' => []];
+return ['http' => [App\Interfaces\Http\Middleware\TraceMiddleware::class]];

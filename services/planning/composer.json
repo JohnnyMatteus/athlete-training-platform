@@ -1,0 +1,60 @@
+{
+  "name": "athlete-training-platform/planning",
+  "description": "Planejamento de treinos (periodização, validador, aderência, vínculo) (Hyperf, hexagonal)",
+  "type": "project",
+  "license": "MIT",
+  "require": {
+    "php": ">=8.4",
+    "aws/aws-sdk-php": "^3.407",
+    "firebase/php-jwt": "^7.0",
+    "guzzlehttp/guzzle": "^8.5",
+    "hyperf/command": "~3.2.0",
+    "hyperf/config": "~3.2.0",
+    "hyperf/database-pgsql": "~3.2.0",
+    "hyperf/db-connection": "~3.2.0",
+    "hyperf/di": "~3.2.0",
+    "hyperf/dispatcher": "~3.2.0",
+    "hyperf/engine": "^2.10",
+    "hyperf/framework": "~3.2.0",
+    "hyperf/http-message": "~3.2.0",
+    "hyperf/http-server": "~3.2.0",
+    "hyperf/logger": "~3.2.0",
+    "hyperf/server": "~3.2.0",
+    "hyperf/validation": "~3.2.0",
+    "nyholm/psr7": "^1.8",
+    "open-telemetry/exporter-otlp": "^1.6",
+    "open-telemetry/sdk": "^1.17",
+    "php-amqplib/php-amqplib": "^3.7",
+    "psr/clock": "^1.0",
+    "ramsey/uuid": "^4.7"
+  },
+  "require-dev": {
+    "friendsofphp/php-cs-fixer": "^3.64",
+    "opis/json-schema": "^2.6",
+    "phpstan/phpstan": "^2.1",
+    "phpunit/phpunit": "^11.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "App\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true
+  },
+  "scripts": {
+    "test": "phpunit --colors=always",
+    "stan": "phpstan analyse --memory-limit=1G",
+    "cs": "php-cs-fixer fix --dry-run --diff",
+    "lint": [
+      "@cs",
+      "@stan"
+    ]
+  }
+}

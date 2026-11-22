@@ -112,7 +112,7 @@ paths:
       tags: [planos]
       operationId: decidePlan
       summary: Treinador aprova ou rejeita o plano
-      description: Só o `treinador_id` do plano, com vínculo ativo. Aprovar muda o status para `ativo` e publica `TreinoPlanejado` de cada treino; rejeitar muda para `rejeitado`.
+      description: Só o `treinador_id` do plano, com vínculo ativo, e só da versão informada em `versao_plano` (outra versão = 409). Aprovar muda o status para `ativo` e publica `TreinoPlanejado` de cada treino; rejeitar muda para `rejeitado`.
       security: [{bearerAuth: []}]
       requestBody:
         required: true
@@ -120,9 +120,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [decisao]
+              required: [decisao, versao_plano]
               properties:
                 decisao: {type: string, enum: [aprovar, rejeitar]}
+                versao_plano: {type: integer, minimum: 1, description: 'Versão do plano que o treinador revisou. Se o plano mudou desde então (ajuste concorrente), a resposta é 409 e nada é ativado.'}
                 comentario: {type: string, maxLength: 1000}
       responses:
         '200':
@@ -170,6 +171,37 @@ paths:
           content:
             application/problem+json:
               schema: {$ref: '#/components/schemas/Problem'}
+  /planos/{plano_id}/ajustes/validacao:
+    parameters:
+      - {$ref: '#/components/parameters/PlanoId'}
+    post:
+      tags: [planos]
+      operationId: validateAdjustment
+      summary: Valida um ajuste sem aplicar (somente leitura)
+      description: |
+        Mesmo corpo, mesma resposta e mesma autorização de `POST /planos/{plano_id}/ajustes`, mas só
+        roda o validador: não grava nada, não cria versão, não escreve na outbox e não publica evento.
+        A resposta nunca traz `plano`. É a rota que o Coach IA usa para propor (ADR 0005); para aplicar,
+        quem decide chama `/ajustes`. Rota separada de propósito, sem flag na rota de escrita.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdjustmentRequest'}
+      responses:
+        '200':
+          description: Resultado da validação (`aceito` diz se `/ajustes` aceitaria agora)
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdjustmentResult'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          description: Proposta malformada
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
   /planos/{plano_id}/aderencia:
     parameters:
       - {$ref: '#/components/parameters/PlanoId'}
@@ -197,7 +229,7 @@ paths:
       tags: [planos]
       operationId: exportWorkoutFit
       summary: Exporta o treino como arquivo .fit de treino estruturado
-      description: Tradutor `FitWorkoutTranslator` (design doc 4.4). Alvos em % do limiar viram alvo FIT quando o limiar do atleta é conhecido; senão o passo fica com alvo aberto. Fallback quando o agendamento no WorkoutKit falha.
+      description: Tradutor `FitWorkoutTranslator` (design doc 4.4). Alvos em % do limiar viram alvo FIT quando o limiar do atleta é conhecido e o chamador pode lê-lo (o atleta, ou o treinador com a categoria `frequencia_cardiaca`); senão o passo fica com alvo aberto. Fallback quando o agendamento no WorkoutKit falha.
       security: [{bearerAuth: []}]
       responses:
         '200':
