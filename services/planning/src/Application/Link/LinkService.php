@@ -64,8 +64,11 @@ final readonly class LinkService
         } catch (DomainException $e) {
             throw new Conflict($e->getMessage());
         }
-        $this->tx->run(function () use ($active): void {
-            $this->links->save($active);
+        $this->tx->run(function () use ($active, $link): void {
+            // Condicional ao status lido: uma revogação concorrente vence e o aceite vira 409 (revogado é terminal).
+            if (!$this->links->transition($active, $link->status)) {
+                throw new Conflict('o vínculo mudou durante o aceite');
+            }
             $this->outbox->append($active->consentedEvent($this->clock->now()));
         });
 
@@ -74,22 +77,33 @@ final readonly class LinkService
 
     public function revoke(Principal $who, string $id): void
     {
-        $link = $this->links->find($id);
-        if ($link === null || ($link->athleteId !== $who->id && $link->coachId !== $who->id)) {
-            throw new NotFound('vínculo não encontrado');
-        }
-        if ($link->status === 'revogado') {
-            return;
-        }
-        $by = $link->athleteId === $who->id ? 'atleta' : 'treinador';
-        $revoked = $link->revoke();
-        $wasActive = $link->status === 'ativo';
-        $this->tx->run(function () use ($revoked, $by, $wasActive): void {
-            $this->links->save($revoked);
-            if ($wasActive) { // convite nunca aceito não chegou a ser publicado
-                $this->outbox->append($revoked->revokedEvent($by, $this->clock->now()));
+        for ($attempt = 0; $attempt < 3; ++$attempt) {
+            $link = $this->links->find($id);
+            if ($link === null || ($link->athleteId !== $who->id && $link->coachId !== $who->id)) {
+                throw new NotFound('vínculo não encontrado');
             }
-        });
+            if ($link->status === 'revogado') {
+                return;
+            }
+            $by = $link->athleteId === $who->id ? 'atleta' : 'treinador';
+            $revoked = $link->revoke();
+            $wasActive = $link->status === 'ativo';
+            $done = $this->tx->run(function () use ($link, $revoked, $by, $wasActive): bool {
+                if (!$this->links->transition($revoked, $link->status)) {
+                    return false;
+                }
+                if ($wasActive) { // convite nunca aceito não chegou a ser publicado
+                    $this->outbox->append($revoked->revokedEvent($by, $this->clock->now()));
+                }
+
+                return true;
+            });
+            if ($done) {
+                return;
+            }
+        }
+
+        throw new Conflict('o vínculo mudou durante a revogação; tente de novo');
     }
 
     /** @return list<Link> */

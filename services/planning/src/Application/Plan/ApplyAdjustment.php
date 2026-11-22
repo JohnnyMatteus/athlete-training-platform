@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Application\Plan;
 
-use App\Application\Conflict;
 use App\Application\Port\EventOutbox;
 use App\Application\Port\PlanRepository;
 use App\Application\Port\Transaction;
@@ -34,9 +33,6 @@ final readonly class ApplyAdjustment
     public function __invoke(Principal $who, string $planId, array $in): array
     {
         $r = $this->evaluator->evaluate($who, $planId, $in);
-        if ($r['plan']->status === PlanStatus::Rejected) {
-            throw new Conflict('plano rejeitado não aceita ajustes');
-        }
         if (!$r['accepted'] || $r['next'] === null) {
             return ['aceito' => false, 'violacoes' => $r['violations'], 'plano' => null];
         }

@@ -29,6 +29,13 @@ final readonly class AccessPolicy
             || ($who->isCoach() && $plan->coachId === $who->id && $this->links->hasActive($plan->athleteId, $who->id, 'plano'));
     }
 
+    /** Limiares (FTP, pace, CSS, FC) são dado de frequência cardíaca/desempenho: o treinador precisa da categoria própria. */
+    public function canReadThresholds(Principal $who, Plan $plan): bool
+    {
+        return $who->id === $plan->athleteId
+            || ($who->isCoach() && $this->links->hasActive($plan->athleteId, $who->id, 'frequencia_cardiaca'));
+    }
+
     public function isPlanCoach(Principal $who, Plan $plan): bool
     {
         return $who->isCoach() && $plan->coachId === $who->id && $this->links->hasActive($plan->athleteId, $who->id, 'plano');

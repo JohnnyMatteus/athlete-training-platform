@@ -9,6 +9,8 @@ CREATE TABLE plano (
 	data_prova    date NOT NULL,
 	inicio        date NOT NULL,
 	conteudo      jsonb NOT NULL,
+	-- Controle otimista: toda gravação compara e incrementa (corridas entre ajuste e aprovação).
+	revisao       integer NOT NULL DEFAULT 1,
 	criado_em     timestamptz NOT NULL DEFAULT now(),
 	atualizado_em timestamptz NOT NULL DEFAULT now()
 );

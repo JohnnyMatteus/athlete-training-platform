@@ -60,6 +60,15 @@ if psql_ -d metricas -c "INSERT INTO limiar VALUES ('2f0f0a2e-6a53-4c3a-9d8e-1b7
   echo "FALHOU: limiar duplicado na mesma data foi aceito"; exit 1
 fi
 
+# Semântica de concorrência das gravações do Planejamento (mesmas instruções de PgPlanRepository e PgLinkRepository)
+psql_ -d planejamento -c "INSERT INTO plano (id, atleta_id, status, versao_plano, prova, data_prova, inicio, conteudo, revisao)
+  VALUES ('b1c2d3e4-f5a6-4b7c-8d9e-0a1b2c3d4e5f', '2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01', 'aguardando_aprovacao', 1, 'meio_ironman', '2027-06-06', '2026-11-30', '{}', 1)" >/dev/null
+cas() { psql_ -d planejamento -c "WITH u AS (UPDATE plano SET status='ativo', revisao = revisao + 1 WHERE id='b1c2d3e4-f5a6-4b7c-8d9e-0a1b2c3d4e5f' AND revisao = $1 RETURNING 1) SELECT count(*) FROM u"; }
+assert "$(cas 1)" 1 "primeira gravação com a revisão lida passa"
+assert "$(cas 1)" 0 "gravação com revisão defasada não passa"
+psql_ -d planejamento -c "INSERT INTO vinculo_treinador (id, atleta_id, treinador_id, status, categorias)
+  VALUES ('d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a', '2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01', 'e5f6a7b8-c9d0-4e1f-8a2b-3c4d5e6f7a8b', 'revogado', '{plano}')" >/dev/null
+assert "$(psql_ -d planejamento -c "WITH u AS (UPDATE vinculo_treinador SET status='ativo' WHERE id='d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a' AND status='pendente' AND status <> 'revogado' RETURNING 1) SELECT count(*) FROM u")" 0 "aceite não ressuscita vínculo revogado"
 migrate_ planejamento down -all
 migrate_ metricas down -all
 migrate_ atividades down -all

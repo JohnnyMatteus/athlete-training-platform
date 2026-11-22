@@ -28,6 +28,9 @@ final readonly class ExportWorkoutFit
             throw new NotFound('treino não encontrado');
         }
 
-        return $this->translator->translate($found['workout'], $this->load->thresholds($found['plan']->athleteId));
+        // Sem a categoria frequencia_cardiaca, o treinador recebe só alvos relativos (% do limiar); os que dependem do limiar saem abertos.
+        $thresholds = $this->access->canReadThresholds($who, $found['plan']) ? $this->load->thresholds($found['plan']->athleteId) : [];
+
+        return $this->translator->translate($found['workout'], $thresholds);
     }
 }

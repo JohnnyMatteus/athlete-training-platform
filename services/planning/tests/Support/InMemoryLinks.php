@@ -17,9 +17,30 @@ final class InMemoryLinks implements LinkRepository
         $this->items[$link->id] = $link;
     }
 
+    /** Executado uma vez logo depois da próxima leitura (simula corrida). */
+    public ?\Closure $afterNextFind = null;
+
+    public function transition(Link $link, string $expectedStatus): bool
+    {
+        $current = $this->items[$link->id] ?? null;
+        if ($current === null || $current->status !== $expectedStatus || $current->status === 'revogado') {
+            return false;
+        }
+        $this->items[$link->id] = $link;
+
+        return true;
+    }
+
     public function find(string $id): ?Link
     {
-        return $this->items[$id] ?? null;
+        $found = $this->items[$id] ?? null;
+        if ($this->afterNextFind !== null) {
+            $hook = $this->afterNextFind;
+            $this->afterNextFind = null;
+            $hook();
+        }
+
+        return $found;
     }
 
     public function listFor(string $userId): array

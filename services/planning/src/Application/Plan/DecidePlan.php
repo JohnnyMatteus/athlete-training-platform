@@ -29,10 +29,13 @@ final readonly class DecidePlan
     ) {
     }
 
-    public function __invoke(Principal $who, string $planId, string $decision): Plan
+    public function __invoke(Principal $who, string $planId, string $decision, ?int $reviewedVersion): Plan
     {
         if (!in_array($decision, ['aprovar', 'rejeitar'], true)) {
             throw new ValidationFailed(['decisao' => 'Use aprovar ou rejeitar.']);
+        }
+        if ($reviewedVersion === null) {
+            throw new ValidationFailed(['versao_plano' => 'Informe a versão do plano que foi revisada.']);
         }
         $plan = $this->access->readable($who, $this->plans->find($planId));
         if (!$this->access->isPlanCoach($who, $plan)) {
@@ -40,6 +43,9 @@ final readonly class DecidePlan
         }
         if ($plan->status !== PlanStatus::AwaitingApproval) {
             throw new Conflict('o plano não está aguardando aprovação');
+        }
+        if ($plan->version !== $reviewedVersion) {
+            throw new Conflict("o plano está na versão {$plan->version}; a versão revisada foi {$reviewedVersion}");
         }
 
         $next = $plan->withStatus($decision === 'aprovar' ? PlanStatus::Active : PlanStatus::Rejected);

@@ -9,6 +9,11 @@ use App\Domain\Plan\Workout;
 
 interface PlanRepository
 {
+    /**
+     * Grava só se a revisão lida ainda é a corrente (plano novo tem revisão 0).
+     *
+     * @throws \App\Application\Conflict quando outro processo gravou o plano depois da leitura
+     */
     public function save(Plan $plan): void;
 
     public function find(string $id): ?Plan;

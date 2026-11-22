@@ -10,6 +10,14 @@ interface LinkRepository
 {
     public function save(Link $link): void;
 
+    /**
+     * Grava a transição só se o vínculo ainda está em `$expectedStatus` (comparação e escrita atômicas).
+     * `revogado` é terminal: nenhuma transição sai dele.
+     *
+     * @return bool false se o status mudou no meio do caminho
+     */
+    public function transition(Link $link, string $expectedStatus): bool;
+
     public function find(string $id): ?Link;
 
     /** @return list<Link> vínculos em que o usuário é atleta ou treinador */

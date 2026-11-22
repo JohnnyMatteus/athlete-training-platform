@@ -63,22 +63,22 @@ final class PlanUseCasesTest extends TestCase
         $w->outbox->events = [];
 
         try {
-            ($w->decide)(World::athlete(), $plan->id, 'aprovar');
+            ($w->decide)(World::athlete(), $plan->id, 'aprovar', 1);
             self::fail('atleta não aprova o próprio plano');
         } catch (Forbidden) {
         }
         try {
-            ($w->decide)(new Principal(World::STRANGER, ['treinador']), $plan->id, 'aprovar');
+            ($w->decide)(new Principal(World::STRANGER, ['treinador']), $plan->id, 'aprovar', 1);
             self::fail('treinador sem vínculo não vê o plano');
         } catch (NotFound) {
         }
 
-        $approved = ($w->decide)(World::coach(), $plan->id, 'aprovar');
+        $approved = ($w->decide)(World::coach(), $plan->id, 'aprovar', 1);
         self::assertSame(PlanStatus::Active, $approved->status);
         self::assertCount(count($plan->workouts), $w->outbox->events);
 
         $this->expectException(Conflict::class);
-        ($w->decide)(World::coach(), $plan->id, 'aprovar');
+        ($w->decide)(World::coach(), $plan->id, 'aprovar', 1);
     }
 
     public function testPainBlocksGenerationWithoutSavingAnything(): void

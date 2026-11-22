@@ -13,10 +13,18 @@ final class PgLinkRepository implements LinkRepository
     public function save(Link $link): void
     {
         Db::statement(
-            'INSERT INTO vinculo_treinador (id, atleta_id, treinador_id, status, categorias) VALUES (?, ?, ?, ?, ?::text[])
-             ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, atualizado_em = now()',
+            'INSERT INTO vinculo_treinador (id, atleta_id, treinador_id, status, categorias) VALUES (?, ?, ?, ?, ?::text[])',
             [$link->id, $link->athleteId, $link->coachId, $link->status, '{' . implode(',', $link->categories) . '}'],
         );
+    }
+
+    public function transition(Link $link, string $expectedStatus): bool
+    {
+        // O WHERE com o status esperado e o bloqueio de `revogado` tornam a transição atômica e o revogado terminal.
+        return Db::affectingStatement(
+            "UPDATE vinculo_treinador SET status = ?, atualizado_em = now() WHERE id = ? AND status = ? AND status <> 'revogado'",
+            [$link->status, $link->id, $expectedStatus],
+        ) === 1;
     }
 
     public function find(string $id): ?Link

@@ -35,6 +35,7 @@ final readonly class Plan
         public array $weeks,
         public array $workouts,
         public ?string $raceName = null,
+        public int $revision = 0,
     ) {
     }
 
@@ -63,6 +64,31 @@ final readonly class Plan
             $weeks ?? $this->weeks,
             $workouts,
             $this->raceName,
+            $this->revision,
+        );
+    }
+
+    /** Revisão lida do banco: 0 = plano novo; o repositório só grava se ela ainda for a corrente. */
+    public function withRevision(int $revision): self
+    {
+        return new self(
+            $this->id,
+            $this->athleteId,
+            $this->status,
+            $this->version,
+            $this->race,
+            $this->raceDate,
+            $this->start,
+            $this->coachMode,
+            $this->coachId,
+            $this->initialCtl,
+            $this->initialAtl,
+            $this->constraints,
+            $this->availability,
+            $this->weeks,
+            $this->workouts,
+            $this->raceName,
+            $revision,
         );
     }
 

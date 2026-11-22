@@ -112,7 +112,7 @@ paths:
       tags: [planos]
       operationId: decidePlan
       summary: Treinador aprova ou rejeita o plano
-      description: Só o `treinador_id` do plano, com vínculo ativo. Aprovar muda o status para `ativo` e publica `TreinoPlanejado` de cada treino; rejeitar muda para `rejeitado`.
+      description: Só o `treinador_id` do plano, com vínculo ativo, e só da versão informada em `versao_plano` (outra versão = 409). Aprovar muda o status para `ativo` e publica `TreinoPlanejado` de cada treino; rejeitar muda para `rejeitado`.
       security: [{bearerAuth: []}]
       requestBody:
         required: true
@@ -120,9 +120,10 @@ paths:
           application/json:
             schema:
               type: object
-              required: [decisao]
+              required: [decisao, versao_plano]
               properties:
                 decisao: {type: string, enum: [aprovar, rejeitar]}
+                versao_plano: {type: integer, minimum: 1, description: 'Versão do plano que o treinador revisou. Se o plano mudou desde então (ajuste concorrente), a resposta é 409 e nada é ativado.'}
                 comentario: {type: string, maxLength: 1000}
       responses:
         '200':
@@ -228,7 +229,7 @@ paths:
       tags: [planos]
       operationId: exportWorkoutFit
       summary: Exporta o treino como arquivo .fit de treino estruturado
-      description: Tradutor `FitWorkoutTranslator` (design doc 4.4). Alvos em % do limiar viram alvo FIT quando o limiar do atleta é conhecido; senão o passo fica com alvo aberto. Fallback quando o agendamento no WorkoutKit falha.
+      description: Tradutor `FitWorkoutTranslator` (design doc 4.4). Alvos em % do limiar viram alvo FIT quando o limiar do atleta é conhecido e o chamador pode lê-lo (o atleta, ou o treinador com a categoria `frequencia_cardiaca`); senão o passo fica com alvo aberto. Fallback quando o agendamento no WorkoutKit falha.
       security: [{bearerAuth: []}]
       responses:
         '200':

@@ -59,7 +59,9 @@ final class PlanController
 
     public function decision(string $id): Psr7Response
     {
-        $plan = ($this->decide)($this->who(), $this->uuid($id), (string) ($this->body()['decisao'] ?? ''));
+        $body = $this->body();
+        $version = $body['versao_plano'] ?? null;
+        $plan = ($this->decide)($this->who(), $this->uuid($id), (string) ($body['decisao'] ?? ''), is_int($version) ? $version : null);
 
         return $this->response->json(PlanPresenter::full($plan));
     }

@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Application\Plan;
 
 use App\Application\Access\AccessPolicy;
+use App\Application\Conflict;
 use App\Application\NotFound;
 use App\Application\Port\PlanRepository;
 use App\Application\ValidationFailed;
 use App\Domain\Plan\Adjustment;
 use App\Domain\Plan\ConstraintValidator;
 use App\Domain\Plan\Plan;
+use App\Domain\Plan\PlanStatus;
 use App\Domain\Plan\Violation;
 use App\Domain\Shared\Principal;
 use InvalidArgumentException;
@@ -38,6 +40,9 @@ final readonly class AdjustmentEvaluator
         $plan = $this->plans->find($planId);
         if ($plan === null || !$this->access->canRead($who, $plan) || !$this->access->canAdjust($who, $plan)) {
             throw new NotFound('plano não encontrado');
+        }
+        if ($plan->status === PlanStatus::Rejected) {
+            throw new Conflict('plano rejeitado não aceita ajustes');
         }
         $reason = trim((string) ($in['motivo'] ?? ''));
         $changes = $in['alteracoes'] ?? null;
