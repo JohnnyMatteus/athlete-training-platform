@@ -302,6 +302,7 @@ services:
     restart: unless-stopped
     networks: [atp]
 
+
   # Workers sem HTTP: o healthcheck é o comando worker:health (processo vivo e broker/banco alcançáveis).
   planning-relay:
     build: ./services/planning
@@ -332,6 +333,51 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    restart: unless-stopped
+    networks: [atp]
+
+  # Estado do Coach IA: propostas pendentes e orçamento diário de tokens (ADR 0025).
+  # Sem porta no host e sem senha: só a rede interna alcança; quem escreve aqui forja proposta pendente.
+  redis:
+    image: redis:7.4.1-alpine
+    profiles: [coach]
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    networks: [atp]
+
+  # Coach IA (LangGraph + MCP). Lê métricas e planejamento por HTTP com o JWT do usuário (ADR 0021).
+  # Profile próprio `coach`: sem ANTHROPIC_API_KEY o processo recusa subir (não há modelo simulado), então fica fora do `make up`.
+  # Uso: docker compose --profile coach --env-file .env up -d redis coach
+  coach:
+    build: ./services/coach
+    profiles: [coach]
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      COACH_PORT: 8130
+      REDIS_URL: redis://redis:6379
+      JWT_PUBLIC_KEY_FILE: /run/jwt/jwt_public.pem
+      JWT_ISSUER: ${JWT_ISSUER:-https://idp.example.test/}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-athlete-api}
+      METRICS_URL: ${METRICS_URL:-http://metrics:8121}
+      PLANNING_URL: ${PLANNING_URL:-http://planning:8120}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      COACH_LLM_MODEL: ${COACH_LLM_MODEL:-}
+      COACH_DAILY_TOKEN_BUDGET: ${COACH_DAILY_TOKEN_BUDGET:-60000}
+    volumes:
+      - ./services/api/runtime:/run/jwt:ro
+    ports:
+      - "${COACH_PORT:-8130}:8130"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8130/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
     restart: unless-stopped
     networks: [atp]
 

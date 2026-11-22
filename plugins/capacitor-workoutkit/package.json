@@ -1,0 +1,12 @@
+{
+  "name": "capacitor-workoutkit",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plugin Capacitor em Swift para o WorkoutKit (agenda treinos no app Workout do Apple Watch).",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "files": ["src", "ios", "Package.swift"],
+  "license": "MIT",
+  "peerDependencies": { "@capacitor/core": ">=8.0.0" },
+  "capacitor": { "ios": { "src": "ios" } }
+}

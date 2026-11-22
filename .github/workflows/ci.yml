@@ -21,7 +21,10 @@ jobs:
       planning: ${{ steps.filter.outputs.planning }}
       ingest: ${{ steps.filter.outputs.ingest }}
       metrics: ${{ steps.filter.outputs.metrics }}
+      coach: ${{ steps.filter.outputs.coach }}
       contracts: ${{ steps.filter.outputs.contracts }}
+      app: ${{ steps.filter.outputs.app }}
+      plugin: ${{ steps.filter.outputs.plugin }}
       infra: ${{ steps.filter.outputs.infra }}
     steps:
       - uses: actions/checkout@v4
@@ -41,8 +44,17 @@ jobs:
             metrics:
               - 'services/metrics/**'
               - 'contracts/**'
+            coach:
+              - 'services/coach/**'
+              - 'contracts/openapi/**'
             contracts:
               - 'contracts/**'
+            app:
+              - 'app/**'
+              - 'plugins/**'
+              - 'contracts/openapi/**'
+            plugin:
+              - 'plugins/**'
             infra:
               - 'infra/**'
               - 'docker-compose.yml'
@@ -138,6 +150,26 @@ jobs:
           go test -tags=integration ./...
           go build ./...
 
+  coach:
+    needs: changes
+    if: needs.changes.outputs.coach == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/coach/package-lock.json
+      - working-directory: services/coach
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run test:evals
+          npm run build
+          npm audit --omit=dev --audit-level=high
+
   contracts:
     needs: changes
     if: needs.changes.outputs.contracts == 'true'
@@ -166,7 +198,7 @@ jobs:
               contracts/events/importacao/examples/$n.v1.json
           done
       - run: |
-          for f in imports planejamento metricas atividades; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$f.yaml; done
+          for f in imports planejamento metricas atividades coach-ports; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$f.yaml; done
       - run: npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
 
   infra:
@@ -186,18 +218,53 @@ jobs:
           --health-interval 5s --health-timeout 3s --health-retries 20
     steps:
       - uses: actions/checkout@v4
-      - run: docker compose --profile core --profile tools --env-file .env.example config -q
+      - run: docker compose --profile core --profile tools --profile coach --env-file .env.example config -q
       - name: Migrações (up, esquema, down, up)
         env:
           PGHOST: 127.0.0.1
           PGPORT: "5432"
         run: ./infra/scripts/test-migrations.sh
 
+  app:
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      # inclui o teste que compara os schemas zod com contracts/openapi
+      - run: npm test
+      - run: npm run build
+
+  # Núcleo Swift do plugin (tradutor, janela deslizante, .fit): Swift Testing, vem com o Xcode 16.
+  plugin-swift:
+    needs: changes
+    if: needs.changes.outputs.plugin == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testes do núcleo
+        working-directory: plugins/capacitor-workoutkit/ios/WorkoutKitCore
+        run: swift test
+      - name: Compila a ponte Capacitor e o mapeador WorkoutKit (iOS)
+        working-directory: plugins/capacitor-workoutkit
+        run: xcodebuild build -scheme CapacitorWorkoutkit -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+
   # Job agregador: é o que a proteção de branch e o Promote enxergam.
   ci:
     name: ci-ok
     if: always()
-    needs: [changes, api, planning, ingest, metrics, contracts, infra]
+    needs: [changes, api, planning, ingest, metrics, coach, contracts, infra, app, plugin-swift]
     runs-on: ubuntu-latest
     steps:
       - name: Falha se algum job falhou ou foi cancelado
