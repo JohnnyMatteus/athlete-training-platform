@@ -1,5 +1,5 @@
 #!/bin/sh
-# Cria o bucket de uploads e a regra de expiração de UPLOADS_RETENTION_DAYS dias (ADR 0019 e ADR 0021).
+# Cria o bucket de uploads e a regra de expiração de UPLOADS_RETENTION_DAYS dias (ADR 0019 e ADR 0035).
 # O LocalStack executa os scripts de /etc/localstack/init/ready.d quando está pronto; o healthcheck do compose
 # só fica saudável depois deste script. Idempotente. Variáveis: UPLOADS_BUCKET e UPLOADS_RETENTION_DAYS.
 set -eu

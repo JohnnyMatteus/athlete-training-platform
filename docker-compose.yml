@@ -44,7 +44,7 @@ services:
 
   # S3 local (LocalStack, só o serviço s3). O bucket de uploads e a regra de expiração (ADR 0019) são criados
   # pelo script de init quando o LocalStack fica pronto; o healthcheck só passa depois dele. Sem persistência
-  # entre recriações (ADR 0021).
+  # entre recriações (ADR 0035).
   localstack:
     image: localstack/localstack:4.4.0
     profiles: [core]
