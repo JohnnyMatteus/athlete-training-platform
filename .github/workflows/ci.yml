@@ -268,7 +268,7 @@ jobs:
 
       - name: Logs em caso de falha
         if: failure()
-        run: docker compose --profile core --env-file .env.example logs --no-color --tail=150 localstack tusd api ingest
+        run: docker compose --profile core --env-file .env.example logs --no-color --tail=150 postgres rabbitmq localstack tusd api api-relay api-consumer ingest
 
       # Só no runner: derruba o ambiente e apaga os volumes.
       - name: Derrubar o ambiente
