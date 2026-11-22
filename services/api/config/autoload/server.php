@@ -1,0 +1,31 @@
+<?php
+
+declare(strict_types=1);
+
+use Hyperf\Server\Event;
+use Hyperf\Server\Server;
+use Swoole\Constant;
+
+return [
+    'mode' => SWOOLE_PROCESS,
+    'servers' => [[
+        'name' => 'http',
+        'type' => Server::SERVER_HTTP,
+        'host' => '0.0.0.0',
+        'port' => (int) env('HTTP_PORT', 9501),
+        'sock_type' => SWOOLE_SOCK_TCP,
+        'callbacks' => [Event::ON_REQUEST => [Hyperf\HttpServer\Server::class, 'onRequest']],
+    ]],
+    'settings' => [
+        Constant::OPTION_ENABLE_COROUTINE => true,
+        Constant::OPTION_WORKER_NUM => (int) env('WORKER_NUM', 2),
+        Constant::OPTION_PID_FILE => '/tmp/athlete-api.pid',
+        Constant::OPTION_OPEN_TCP_NODELAY => true,
+        Constant::OPTION_MAX_COROUTINE => 100000,
+    ],
+    'callbacks' => [
+        Event::ON_WORKER_START => [Hyperf\Framework\Bootstrap\WorkerStartCallback::class, 'onWorkerStart'],
+        Event::ON_PIPE_MESSAGE => [Hyperf\Framework\Bootstrap\PipeMessageCallback::class, 'onPipeMessage'],
+        Event::ON_WORKER_EXIT => [Hyperf\Framework\Bootstrap\WorkerExitCallback::class, 'onWorkerExit'],
+    ],
+];

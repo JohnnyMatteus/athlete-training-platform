@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Unit;
+
+use App\Infrastructure\Acl\TusdHook;
+use InvalidArgumentException;
+use PHPUnit\Framework\TestCase;
+
+final class TusdHookTest extends TestCase
+{
+    public function testTranslatesTusdV2Payload(): void
+    {
+        $hook = TusdHook::fromArray([
+            'Type' => 'post-finish',
+            'Event' => [
+                'Upload' => [
+                    'ID' => 'abc',
+                    'Size' => 42,
+                    'MetaData' => ['import_id' => 'x-1'],
+                    'Storage' => ['Type' => 's3store', 'Bucket' => 'imports', 'Key' => 'abc'],
+                ],
+                'HTTPRequest' => ['Header' => ['Authorization' => ['Bearer tok.en.sig']]],
+            ],
+        ]);
+
+        self::assertSame('post-finish', $hook->type);
+        self::assertSame('x-1', $hook->importId);
+        self::assertSame(42, $hook->size);
+        self::assertSame('abc', $hook->storageKey);
+        self::assertSame('tok.en.sig', $hook->bearerToken);
+    }
+
+    public function testMissingOptionalFieldsAreNull(): void
+    {
+        $hook = TusdHook::fromArray(['Type' => 'pre-create', 'Event' => ['Upload' => ['Size' => 1]]]);
+
+        self::assertNull($hook->importId);
+        self::assertNull($hook->storageKey);
+        self::assertNull($hook->bearerToken);
+    }
+
+    public function testRejectsMalformedPayload(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        TusdHook::fromArray(['Type' => 'post-finish']);
+    }
+}

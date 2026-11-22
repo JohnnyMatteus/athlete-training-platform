@@ -12,5 +12,6 @@ Decisões iniciais do [design doc](../design-doc.md) (seção 13), no formato de
 | [0006](0006-plugin-capacitor-workoutkit.md) | A-06 | Plugin Capacitor próprio em Swift para o WorkoutKit, publicado como open source | não (M5) |
 | [0007](0007-hyperf-api-planejamento-go-ingestao-metricas.md) | A-07 | Hyperf para API e Planejamento; Go para ingestão e métricas | sim |
 | [0008](0008-dados-de-saude-sensiveis-lgpd.md) | A-08 | Dados de saúde tratados como sensíveis (LGPD): consentimento, criptografia, retenção curta de arquivos | sim (dados sintéticos, retenção) |
+| [0009](0009-autenticacao-jwt-do-atleta.md) | n/a | Autenticação do atleta com JWT (RS256) validado pela API; provedor fora do M1 | sim |
 
 Onde o design doc não registra alternativas, o ADR diz isso explicitamente em vez de inventar; o autor completa antes de aceitar.
