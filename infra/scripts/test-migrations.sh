@@ -51,6 +51,9 @@ assert "$(psql_ -d importacao -c "SELECT count(*) FROM information_schema.column
 
 assert "$(psql_ -d metricas -c "SELECT count(*) FROM information_schema.columns WHERE table_name='carga_diaria'
   AND column_name IN ('atleta_id','dia','tss','ctl','atl','tsb')")" 6 "colunas de carga_diaria"
+assert "$(psql_ -d metricas -c "SELECT count(*) FROM information_schema.columns WHERE table_name IN ('outbox') AND column_name='traceparent'")" 1 "traceparent na outbox de metricas"
+assert "$(psql_ -d metricas -c "SELECT count(*) FROM information_schema.tables WHERE table_name='vinculo_treinador'")" 1 "vinculo_treinador"
+assert "$(psql_ -d atividades -c "SELECT count(*) FROM information_schema.columns WHERE table_name='outbox' AND column_name='traceparent'")" 1 "traceparent na outbox de atividades"
 psql_ -d metricas -c "INSERT INTO limiar VALUES ('2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01', 'ftp', 250, '2026-01-01')" >/dev/null
 if psql_ -d metricas -c "INSERT INTO limiar VALUES ('2f0f0a2e-6a53-4c3a-9d8e-1b7e6c5d4a01', 'ftp', 260, '2026-01-01')" >/dev/null 2>&1; then
   echo "FALHOU: limiar duplicado na mesma data foi aceito"; exit 1

@@ -5,9 +5,12 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -87,4 +90,53 @@ func TestPatchOnlyByOwnerWithValidJWT(t *testing.T) {
 	assert.Equal(t, 404, do(h, "PATCH", url, token(t, key, uuid.New()), body), "atividade de outro atleta")
 	assert.Equal(t, 200, do(h, "PATCH", url, token(t, key, owner), body))
 	assert.Equal(t, 422, do(h, "PATCH", url, token(t, key, owner), `{}`))
+}
+
+type pagedReader struct{}
+
+func (pagedReader) Page(context.Context, uuid.UUID, *time.Time, int) (activities.Header, []activities.Sample, error) {
+	i16, f32 := func(v int16) *int16 { return &v }, func(v float32) *float32 { return &v }
+	t0 := time.Date(2026, 3, 1, 7, 0, 0, 0, time.UTC)
+	return activities.Header{ActivityID: uuid.New(), AthleteID: uuid.New(), Type: "ciclismo_outdoor", Start: t0, DurationS: 3600},
+		[]activities.Sample{
+			{TS: t0, HR: i16(120), Power: i16(200), Cadence: i16(85), Speed: f32(8.3), Altitude: f32(12.5)},
+			{TS: t0.Add(time.Second)},
+			{TS: t0.Add(2 * time.Second)},
+		}, nil
+}
+
+// O exemplo em contracts/ é lido também pelo cliente do metrics: se as chaves divergirem, um dos dois testes quebra.
+func TestSamplesResponseMatchesContractExample(t *testing.T) {
+	raw, err := os.ReadFile("../../../../../contracts/openapi/examples/atividades-amostras-pagina.json")
+	require.NoError(t, err)
+	var want map[string]any
+	require.NoError(t, json.Unmarshal(raw, &want))
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	require.NoError(t, err)
+	auth, err := jwtauth.New(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: der}), "iss", "aud")
+	require.NoError(t, err)
+	h := httpapi.New(pagedReader{}, activities.NewCorrector(uow{uuid.New()}, time.Now), auth, "svc-token").Handler()
+
+	r := httptest.NewRequest("GET", "/internal/atividades/"+uuid.NewString()+"/amostras?limite=2", nil)
+	r.Header.Set("Authorization", "Bearer svc-token")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	require.Equal(t, 200, w.Code)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &got))
+
+	keys := func(m map[string]any) []string {
+		out := make([]string, 0, len(m))
+		for k := range m {
+			out = append(out, k)
+		}
+		sort.Strings(out)
+		return out
+	}
+	assert.Equal(t, keys(want), keys(got))
+	assert.Equal(t, keys(want["amostras"].([]any)[0].(map[string]any)), keys(got["amostras"].([]any)[0].(map[string]any)))
+	assert.NotNil(t, got["proximo_cursor"])
 }

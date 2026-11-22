@@ -137,7 +137,7 @@ func (c *Consumer) dispatch(ctx context.Context, d amqp.Delivery) {
 	switch {
 	case err == nil:
 		_ = d.Ack(false)
-	case errors.Is(err, ErrInvalidMessage):
+	case errors.Is(err, ErrInvalidMessage), errors.Is(err, metrics.ErrActivityGone):
 		c.log.ErrorContext(ctx, "mensagem descartada", "fila", c.queue, "erro", err)
 		_ = d.Nack(false, false) // sem requeue: cai em importacao.dlq
 	default:

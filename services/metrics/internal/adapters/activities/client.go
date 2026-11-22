@@ -4,7 +4,6 @@ package activities
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -19,7 +18,7 @@ import (
 )
 
 // ErrNotFound indica atividade inexistente no contexto de Atividades.
-var ErrNotFound = errors.New("atividade não encontrada")
+var ErrNotFound = fmt.Errorf("%w: 404 do endpoint de amostras", metrics.ErrActivityGone)
 
 // Client implementa metrics.SampleSource sobre HTTP, paginando por cursor.
 type Client struct {
