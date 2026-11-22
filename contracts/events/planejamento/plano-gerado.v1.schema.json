@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.athlete-training-platform.example/events/planejamento/plano-gerado.v1.schema.json",
+  "title": "PlanoGerado",
+  "description": "Um plano foi gerado pelo motor determinístico e passou no validador. Publicado pelo serviço de Planejamento.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "tipo",
+    "versao",
+    "ocorrido_em",
+    "dados"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Identificador único do evento. Consumidores deduplicam por ele (entrega pelo menos uma vez)."
+    },
+    "tipo": {
+      "const": "PlanoGerado"
+    },
+    "versao": {
+      "const": 1,
+      "description": "Versão do contrato. Mudança incompatível cria um arquivo .v2."
+    },
+    "ocorrido_em": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Instante UTC em que o fato ocorreu."
+    },
+    "dados": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "plano_id",
+        "atleta_id",
+        "versao_plano",
+        "status",
+        "modo_treinador",
+        "treinador_id",
+        "prova",
+        "data_prova",
+        "inicio",
+        "semanas",
+        "ctl_inicial",
+        "tss_total_planejado"
+      ],
+      "properties": {
+        "plano_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "atleta_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "versao_plano": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "aguardando_aprovacao",
+            "ativo"
+          ]
+        },
+        "modo_treinador": {
+          "type": "boolean"
+        },
+        "treinador_id": {
+          "oneOf": [
+            {
+              "type": "string",
+              "format": "uuid"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "prova": {
+          "type": "string"
+        },
+        "data_prova": {
+          "type": "string",
+          "format": "date"
+        },
+        "inicio": {
+          "type": "string",
+          "format": "date"
+        },
+        "semanas": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ctl_inicial": {
+          "type": "number"
+        },
+        "tss_total_planejado": {
+          "type": "number"
+        }
+      }
+    }
+  }
+}

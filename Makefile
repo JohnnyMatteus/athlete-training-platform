@@ -48,10 +48,11 @@ contracts-check: ## Valida esquemas, exemplos e OpenAPI/AsyncAPI
 	uvx check-jsonschema==0.30.0 --check-metaschema contracts/events/importacao/*.schema.json
 	@for n in importacao-recebida treino-importado importacao-concluida importacao-falhou; do \
 	  uvx check-jsonschema==0.30.0 --schemafile contracts/events/importacao/$$n.v1.schema.json contracts/events/importacao/examples/$$n.v1.json; done
-	uvx check-jsonschema==0.30.0 --check-metaschema contracts/events/atividades/*.schema.json contracts/events/metricas/*.schema.json
+	uvx check-jsonschema==0.30.0 --check-metaschema contracts/events/atividades/*.schema.json contracts/events/metricas/*.schema.json contracts/events/planejamento/*.schema.json contracts/events/atleta/*.schema.json
 	uvx check-jsonschema==0.30.0 --schemafile contracts/events/atividades/atividade-corrigida.v1.schema.json contracts/events/atividades/examples/atividade-corrigida.v1.json
-	uvx check-jsonschema==0.30.0 --schemafile contracts/events/metricas/metricas-calculadas.v1.schema.json contracts/events/metricas/examples/metricas-calculadas.v1.json
-	npx --yes @redocly/cli@1.34.5 lint contracts/openapi/imports.yaml
+	for n in metricas/metricas-calculadas metricas/limiar-atualizado planejamento/plano-gerado planejamento/treino-planejado planejamento/plano-ajustado atleta/vinculo-consentido atleta/vinculo-revogado; do \
+	  uvx check-jsonschema==0.30.0 --schemafile contracts/events/$$n.v1.schema.json contracts/events/$$(dirname $$n)/examples/$$(basename $$n).v1.json; done
+	for f in imports planejamento metricas atividades; do npx --yes @redocly/cli@1.34.5 lint contracts/openapi/$$f.yaml; done
 	npx --yes @asyncapi/cli@2.16.2 validate contracts/asyncapi.yaml
 
 clean: ## Remove containers e volumes

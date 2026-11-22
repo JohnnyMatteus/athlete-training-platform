@@ -1,0 +1,559 @@
+openapi: 3.1.0
+info:
+  title: Athlete Training Platform - API de Planejamento
+  version: 1.0.0
+  description: |
+    Periodização, validação de restrições, ajustes, aprovação do treinador, aderência, export .fit e
+    vínculo atleta-treinador. O plano é gerado por motor determinístico (ADR 0005): as mesmas entradas
+    produzem o mesmo plano; o validador de restrições é código, não prompt.
+
+    Autenticação por JWT RS256 (ADR 0011). `sub` é o usuário; a claim `roles` (lista de `atleta`,
+    `treinador`, `admin`; ausente equivale a `[atleta]`) define o papel (ADR 0014). Treinador só lê e
+    aprova planos de atleta com vínculo `ativo`; sem vínculo a resposta é 404. `admin` não lê dados de saúde.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8120
+    description: Desenvolvimento local
+tags:
+  - {name: planos, description: 'Geração, consulta, ajustes e aprovação'}
+  - {name: vinculos, description: Vínculo consentido atleta-treinador}
+paths:
+  /planos:
+    post:
+      tags: [planos]
+      operationId: createPlan
+      summary: Gera um plano
+      description: |
+        Só o atleta gera o próprio plano. O motor usa o CTL/ATL atuais (read model de `MetricasCalculadas`;
+        sem histórico, `ctl_inicial` do corpo ou 0) e os limiares (read model de `LimiarAtualizado`).
+        `relato_dor: true` bloqueia a geração (422, código `bloqueado_por_dor`). Plano que viole regra
+        obrigatória do validador não é persistido (422, código `restricoes_violadas`, com `violacoes`).
+        Com `modo_treinador`, o plano fica `aguardando_aprovacao` e exige vínculo `ativo` com `treinador_id`;
+        sem ele, fica `ativo` e `PlanoGerado` e `TreinoPlanejado` são publicados.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreatePlanRequest'}
+            examples:
+              meioIronman:
+                value:
+                  meta: {prova: meio_ironman, data_prova: '2027-12-05', nome: Meio Ironman}
+                  inicio: '2026-11-30'
+                  disponibilidade:
+                    - {dia_semana: 1, minutos_max: 60, modalidades: [natacao], piscina_m: 25}
+                    - {dia_semana: 2, minutos_max: 90, modalidades: [corrida, ciclismo]}
+                    - {dia_semana: 3, minutos_max: 60, modalidades: [natacao, forca], piscina_m: 25}
+                    - {dia_semana: 4, minutos_max: 90, modalidades: [corrida]}
+                    - {dia_semana: 6, minutos_max: 240, modalidades: [ciclismo]}
+                    - {dia_semana: 7, minutos_max: 120, modalidades: [corrida]}
+                  modo_treinador: false
+                  relato_dor: false
+      responses:
+        '201':
+          description: Plano gerado
+          headers:
+            Location: {schema: {type: string}}
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Plan'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422':
+          description: Entrada inválida, bloqueio por dor ou restrições violadas
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    get:
+      tags: [planos]
+      operationId: listPlans
+      summary: Lista planos do atleta
+      description: Sem `atleta_id`, lista os do chamador. Treinador informa `atleta_id` de um atleta com vínculo ativo (senão 404).
+      security: [{bearerAuth: []}]
+      parameters:
+        - {name: atleta_id, in: query, required: false, schema: {type: string, format: uuid}}
+      responses:
+        '200':
+          description: Planos (sem mesociclos; use GET /planos/{id})
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items: {$ref: '#/components/schemas/PlanSummary'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /planos/{plano_id}:
+    parameters:
+      - {$ref: '#/components/parameters/PlanoId'}
+    get:
+      tags: [planos]
+      operationId: getPlan
+      summary: Plano completo (mesociclos, microciclos, treinos, blocos e passos)
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Plano
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Plan'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /planos/{plano_id}/aprovacao:
+    parameters:
+      - {$ref: '#/components/parameters/PlanoId'}
+    post:
+      tags: [planos]
+      operationId: decidePlan
+      summary: Treinador aprova ou rejeita o plano
+      description: Só o `treinador_id` do plano, com vínculo ativo. Aprovar muda o status para `ativo` e publica `TreinoPlanejado` de cada treino; rejeitar muda para `rejeitado`.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decisao]
+              properties:
+                decisao: {type: string, enum: [aprovar, rejeitar]}
+                comentario: {type: string, maxLength: 1000}
+      responses:
+        '200':
+          description: Plano atualizado
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Plan'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409':
+          description: Plano não está `aguardando_aprovacao`
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /planos/{plano_id}/ajustes:
+    parameters:
+      - {$ref: '#/components/parameters/PlanoId'}
+    post:
+      tags: [planos]
+      operationId: proposeAdjustment
+      summary: Propõe um ajuste; o validador decide
+      description: |
+        É o ponto que o Coach IA usa (`propose_adjustment`): a proposta é aplicada a uma cópia, validada
+        e só então aceita. `aceito: false` devolve as violações e não altera nada (200). Aceito: nova
+        `versao_plano`, evento `PlanoAjustado` e `TreinoPlanejado` dos treinos alterados. Com modo treinador,
+        o plano volta a `aguardando_aprovacao`. `relato_dor: true` recusa o ajuste (regra `dor_bloqueia`).
+        Só o atleta dono, ou o treinador do plano com vínculo ativo, propõe.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/AdjustmentRequest'}
+      responses:
+        '200':
+          description: Resultado da validação
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/AdjustmentResult'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422':
+          description: Proposta malformada
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+  /planos/{plano_id}/aderencia:
+    parameters:
+      - {$ref: '#/components/parameters/PlanoId'}
+    get:
+      tags: [planos]
+      operationId: getAdherence
+      summary: Aderência ao plano (TSS realizado / TSS planejado)
+      description: Por sessão (treino planejado casado com atividade do mesmo dia e modalidade) e por semana. Realizado vem de `MetricasCalculadas`. Semana sem TSS planejado tem `aderencia` nula.
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Aderência
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Adherence'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /treinos/{treino_id}/export.fit:
+    parameters:
+      - name: treino_id
+        in: path
+        required: true
+        schema: {type: string, format: uuid}
+    get:
+      tags: [planos]
+      operationId: exportWorkoutFit
+      summary: Exporta o treino como arquivo .fit de treino estruturado
+      description: Tradutor `FitWorkoutTranslator` (design doc 4.4). Alvos em % do limiar viram alvo FIT quando o limiar do atleta é conhecido; senão o passo fica com alvo aberto. Fallback quando o agendamento no WorkoutKit falha.
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Arquivo FIT (tipo de arquivo `workout`)
+          content:
+            application/vnd.ant.fit:
+              schema: {type: string, format: binary}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /vinculos:
+    post:
+      tags: [vinculos]
+      operationId: inviteCoach
+      summary: Atleta convida um treinador (consentimento)
+      description: Cria o vínculo `pendente` com as categorias consentidas. O treinador não lê nada até aceitar.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [treinador_id, categorias]
+              properties:
+                treinador_id: {type: string, format: uuid}
+                categorias:
+                  type: array
+                  minItems: 1
+                  items: {type: string, enum: [treinos, frequencia_cardiaca, plano]}
+      responses:
+        '201':
+          description: Convite criado
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Link'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422':
+          description: Entrada inválida
+          content:
+            application/problem+json:
+              schema: {$ref: '#/components/schemas/Problem'}
+    get:
+      tags: [vinculos]
+      operationId: listLinks
+      summary: Vínculos em que o chamador é atleta ou treinador
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Vínculos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items: {$ref: '#/components/schemas/Link'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+  /vinculos/{vinculo_id}/aceite:
+    parameters:
+      - {$ref: '#/components/parameters/VinculoId'}
+    post:
+      tags: [vinculos]
+      operationId: acceptLink
+      summary: Treinador aceita o convite; publica VinculoTreinadorConsentido
+      security: [{bearerAuth: []}]
+      responses:
+        '200':
+          description: Vínculo ativo
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Link'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /vinculos/{vinculo_id}:
+    parameters:
+      - {$ref: '#/components/parameters/VinculoId'}
+    delete:
+      tags: [vinculos]
+      operationId: revokeLink
+      summary: Atleta ou treinador encerra o vínculo; publica VinculoTreinadorRevogado
+      security: [{bearerAuth: []}]
+      responses:
+        '204': {description: Vínculo revogado}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /health:
+    get:
+      operationId: health
+      security: []
+      summary: Liveness
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    PlanoId: {name: plano_id, in: path, required: true, schema: {type: string, format: uuid}}
+    VinculoId: {name: vinculo_id, in: path, required: true, schema: {type: string, format: uuid}}
+  responses:
+    Unauthenticated:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Forbidden:
+      description: Papel sem permissão para a operação
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    NotFound:
+      description: Recurso inexistente ou de atleta que não consentiu (não revela existência)
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Modality: {type: string, enum: [natacao, ciclismo, corrida, forca]}
+    Problem:
+      type: object
+      description: RFC 9457 (`application/problem+json`). `codigo` pode ser `bloqueado_por_dor` ou `restricoes_violadas`.
+      required: [type, title, status]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+        codigo: {type: string}
+        recomendacao: {type: string, description: Presente no bloqueio por dor; orienta procurar profissional.}
+        violacoes:
+          type: array
+          items: {$ref: '#/components/schemas/Violation'}
+        errors:
+          type: array
+          items:
+            type: object
+            required: [campo, mensagem]
+            properties:
+              campo: {type: string}
+              mensagem: {type: string}
+    Violation:
+      type: object
+      required: [regra, severidade, mensagem]
+      properties:
+        regra:
+          type: string
+          enum: [rampa_ctl, tsb_minimo, dias_alta_consecutivos, sem_descanso, volume_acima_disponibilidade, forca_com_limiar_corrida, dor_bloqueia]
+        severidade: {type: string, enum: [obrigatoria, preferencial]}
+        semana: {type: integer}
+        data: {type: string, format: date}
+        valor: {type: number}
+        limite: {type: number}
+        mensagem: {type: string}
+    Constraints:
+      type: object
+      description: Padrões do design doc 7.3; todos configuráveis.
+      properties:
+        rampa_ctl_max: {type: number, default: 5}
+        tsb_min_alta_intensidade: {type: number, default: -25}
+        dias_alta_consecutivos_max: {type: integer, default: 2}
+        descanso_min_por_semana: {type: integer, default: 1}
+        baixa_intensidade_pct: {type: number, default: 80, description: Distribuição polarizada}
+        descarga_a_cada_semanas: {type: integer, enum: [3, 4], default: 4}
+    Availability:
+      type: object
+      required: [dia_semana, minutos_max, modalidades]
+      properties:
+        dia_semana: {type: integer, minimum: 1, maximum: 7, description: 1 = segunda}
+        minutos_max: {type: integer, minimum: 0, maximum: 720}
+        modalidades:
+          type: array
+          items: {$ref: '#/components/schemas/Modality'}
+        piscina_m: {type: number, enum: [12.5, 20, 25, 33, 50]}
+        musculacao_fixa: {type: boolean, default: false, description: Dia fixo de musculação.}
+    CreatePlanRequest:
+      type: object
+      required: [meta, inicio, disponibilidade]
+      properties:
+        meta:
+          type: object
+          required: [prova, data_prova]
+          properties:
+            prova: {type: string, enum: [triatlo_sprint, triatlo_olimpico, meio_ironman, ironman, corrida_10k, meia_maratona, maratona]}
+            data_prova: {type: string, format: date}
+            nome: {type: string, maxLength: 120}
+        inicio: {type: string, format: date, description: Segunda-feira de início}
+        disponibilidade:
+          type: array
+          minItems: 1
+          items: {$ref: '#/components/schemas/Availability'}
+        restricoes: {$ref: '#/components/schemas/Constraints'}
+        ctl_inicial: {type: number, minimum: 0, description: Usado só sem histórico de carga.}
+        modo_treinador: {type: boolean, default: false}
+        treinador_id: {type: string, format: uuid}
+        relato_dor: {type: boolean, default: false}
+    Step:
+      type: object
+      required: [tipo, objetivo]
+      properties:
+        tipo: {type: string, enum: [aquecimento, trabalho, recuperacao, desaquecimento]}
+        objetivo:
+          type: object
+          required: [tipo]
+          properties:
+            tipo: {type: string, enum: [tempo, distancia, aberto]}
+            valor: {type: number, description: Segundos ou metros}
+        alvo:
+          type: object
+          required: [tipo, baixo, alto]
+          properties:
+            tipo: {type: string, enum: [potencia_pct_ftp, pace_pct_limiar, css_pct, fc_pct_max, rpe]}
+            baixo: {type: number}
+            alto: {type: number}
+    Block:
+      type: object
+      required: [repeticoes, passos]
+      properties:
+        repeticoes: {type: integer, minimum: 1}
+        passos:
+          type: array
+          items: {$ref: '#/components/schemas/Step'}
+    Workout:
+      type: object
+      required: [id, data, modalidade, nome, intensidade, duracao_s, tss_planejado, blocos]
+      properties:
+        id: {type: string, format: uuid}
+        data: {type: string, format: date}
+        modalidade: {$ref: '#/components/schemas/Modality'}
+        nome: {type: string}
+        intensidade: {type: string, enum: [descanso, baixa, moderada, alta]}
+        duracao_s: {type: integer}
+        tss_planejado: {type: number}
+        blocos:
+          type: array
+          items: {$ref: '#/components/schemas/Block'}
+    Microcycle:
+      type: object
+      required: [semana, inicio, descarga, tss_planejado, ctl_projetado, treinos]
+      properties:
+        semana: {type: integer, minimum: 1}
+        inicio: {type: string, format: date}
+        descarga: {type: boolean}
+        tss_planejado: {type: number}
+        ctl_projetado: {type: number, description: CTL ao fim da semana}
+        treinos:
+          type: array
+          items: {$ref: '#/components/schemas/Workout'}
+    Mesocycle:
+      type: object
+      required: [fase, microciclos]
+      properties:
+        fase: {type: string, enum: [base, construcao, pico, polimento, transicao]}
+        microciclos:
+          type: array
+          items: {$ref: '#/components/schemas/Microcycle'}
+    PlanSummary:
+      type: object
+      required: [id, atleta_id, status, versao_plano, prova, data_prova, inicio]
+      properties:
+        id: {type: string, format: uuid}
+        atleta_id: {type: string, format: uuid}
+        status: {type: string, enum: [aguardando_aprovacao, ativo, rejeitado]}
+        versao_plano: {type: integer}
+        prova: {type: string}
+        data_prova: {type: string, format: date}
+        inicio: {type: string, format: date}
+    Plan:
+      allOf:
+        - {$ref: '#/components/schemas/PlanSummary'}
+        - type: object
+          required: [modo_treinador, ctl_inicial, mesociclos, avisos]
+          properties:
+            modo_treinador: {type: boolean}
+            treinador_id: {type: [string, 'null'], format: uuid}
+            ctl_inicial: {type: number}
+            mesociclos:
+              type: array
+              items: {$ref: '#/components/schemas/Mesocycle'}
+            avisos:
+              type: array
+              description: Violações de regras preferenciais.
+              items: {$ref: '#/components/schemas/Violation'}
+    AdjustmentRequest:
+      type: object
+      required: [motivo, alteracoes]
+      properties:
+        motivo: {type: string, maxLength: 500}
+        origem: {type: string, enum: [atleta, treinador, coach], default: atleta}
+        relato_dor: {type: boolean, default: false}
+        alteracoes:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [treino_id, acao]
+            properties:
+              treino_id: {type: string, format: uuid}
+              acao: {type: string, enum: [mover, alterar_intensidade, remover]}
+              nova_data: {type: string, format: date}
+              nova_intensidade: {type: string, enum: [descanso, baixa, moderada, alta]}
+    AdjustmentResult:
+      type: object
+      required: [aceito, violacoes]
+      properties:
+        aceito: {type: boolean}
+        violacoes:
+          type: array
+          items: {$ref: '#/components/schemas/Violation'}
+        plano: {$ref: '#/components/schemas/Plan'}
+    Adherence:
+      type: object
+      required: [plano_id, semanas, aderencia_geral]
+      properties:
+        plano_id: {type: string, format: uuid}
+        aderencia_geral: {type: [number, 'null']}
+        semanas:
+          type: array
+          items:
+            type: object
+            required: [semana, tss_planejado, tss_realizado, aderencia, sessoes]
+            properties:
+              semana: {type: integer}
+              tss_planejado: {type: number}
+              tss_realizado: {type: number}
+              aderencia: {type: [number, 'null']}
+              sessoes:
+                type: array
+                items:
+                  type: object
+                  required: [treino_id, data, tss_planejado, tss_realizado, aderencia]
+                  properties:
+                    treino_id: {type: string, format: uuid}
+                    data: {type: string, format: date}
+                    tss_planejado: {type: number}
+                    tss_realizado: {type: number}
+                    aderencia: {type: [number, 'null']}
+    Link:
+      type: object
+      required: [id, atleta_id, treinador_id, status, categorias]
+      properties:
+        id: {type: string, format: uuid}
+        atleta_id: {type: string, format: uuid}
+        treinador_id: {type: string, format: uuid}
+        status: {type: string, enum: [pendente, ativo, revogado]}
+        categorias:
+          type: array
+          items: {type: string, enum: [treinos, frequencia_cardiaca, plano]}

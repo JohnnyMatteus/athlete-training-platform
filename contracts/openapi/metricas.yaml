@@ -1,0 +1,230 @@
+openapi: 3.1.0
+info:
+  title: Athlete Training Platform - API de Métricas
+  version: 1.0.0
+  description: |
+    Leitura de carga e atividades calculadas para o app, e escrita de perfil fisiológico e limiares
+    (o banco `metricas` é dono dessas tabelas, ADR 0012). JWT RS256 (ADR 0011); papéis na claim `roles` (ADR 0014).
+    Atleta lê e escreve só o que é dele. Treinador lê (nunca escreve) o atleta informado em `atleta_id`
+    somente com vínculo `ativo` (read model alimentado por `VinculoTreinadorConsentido`/`Revogado`);
+    sem vínculo, 404.
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: http://localhost:8121
+    description: Desenvolvimento local
+paths:
+  /metricas/carga:
+    get:
+      operationId: getLoad
+      summary: Série diária de TSS, CTL, ATL e TSB
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AtletaId'}
+        - {name: de, in: query, required: false, schema: {type: string, format: date}}
+        - {name: ate, in: query, required: false, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Dias em ordem crescente (padrão últimos 90 dias)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [atleta_id, dias]
+                properties:
+                  atleta_id: {type: string, format: uuid}
+                  dias:
+                    type: array
+                    items:
+                      type: object
+                      required: [dia, tss, ctl, atl, tsb]
+                      properties:
+                        dia: {type: string, format: date}
+                        tss: {type: number}
+                        ctl: {type: number}
+                        atl: {type: number}
+                        tsb: {type: number}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /metricas/atividades:
+    get:
+      operationId: listActivityLoads
+      summary: Carga por atividade (método, TSS, descartes de qualidade)
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AtletaId'}
+        - {name: de, in: query, required: false, schema: {type: string, format: date}}
+        - {name: ate, in: query, required: false, schema: {type: string, format: date}}
+      responses:
+        '200':
+          description: Atividades
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items:
+                      type: object
+                      required: [atividade_id, dia, tipo, metodo, tss, descartes_fc, descartes_potencia]
+                      properties:
+                        atividade_id: {type: string, format: uuid}
+                        dia: {type: string, format: date}
+                        tipo: {type: string}
+                        metodo: {type: string, enum: [tss_potencia, rtss, stss, trimp, indisponivel]}
+                        tss: {type: number}
+                        np: {type: [number, 'null']}
+                        fator_intensidade: {type: [number, 'null']}
+                        descartes_fc: {type: integer}
+                        descartes_potencia: {type: integer}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /metricas/limiares:
+    get:
+      operationId: listThresholds
+      summary: Histórico de limiares do atleta
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AtletaId'}
+      responses:
+        '200':
+          description: Limiares versionados por `vigente_desde`
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [itens]
+                properties:
+                  itens:
+                    type: array
+                    items: {$ref: '#/components/schemas/Threshold'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: putThreshold
+      summary: Registra um limiar (só o atleta)
+      description: 'Upsert por (tipo, vigente_desde). Publica LimiarAtualizado. Não recalcula o histórico: atividades já calculadas mantêm o limiar vigente na época; para recalcular, corrija a atividade (AtividadeCorrigida).'
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Threshold'}
+      responses:
+        '200':
+          description: Limiar gravado
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Threshold'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /metricas/perfil:
+    get:
+      operationId: getProfile
+      summary: Perfil fisiológico (sexo, FC de repouso e máxima)
+      security: [{bearerAuth: []}]
+      parameters:
+        - {$ref: '#/components/parameters/AtletaId'}
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Profile'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '404': {$ref: '#/components/responses/NotFound'}
+    put:
+      operationId: putProfile
+      summary: Grava o perfil (só o atleta)
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Profile'}
+      responses:
+        '200':
+          description: Perfil gravado
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Profile'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '422': {$ref: '#/components/responses/Invalid'}
+  /health:
+    get:
+      operationId: health
+      security: []
+      summary: Liveness
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: {type: string}
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    AtletaId:
+      name: atleta_id
+      in: query
+      required: false
+      description: Só treinador com vínculo ativo; omitido, vale o chamador.
+      schema: {type: string, format: uuid}
+  responses:
+    Unauthenticated:
+      description: Token ausente, inválido ou expirado
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Forbidden:
+      description: Papel sem permissão (treinador não escreve)
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    NotFound:
+      description: Atleta sem consentimento ou dado inexistente (não revela existência)
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+    Invalid:
+      description: Parâmetro ou corpo inválido
+      content:
+        application/problem+json:
+          schema: {$ref: '#/components/schemas/Problem'}
+  schemas:
+    Problem:
+      type: object
+      required: [type, title, status]
+      properties:
+        type: {type: string}
+        title: {type: string}
+        status: {type: integer}
+        detail: {type: string}
+    Threshold:
+      type: object
+      required: [tipo, valor, vigente_desde]
+      properties:
+        tipo: {type: string, enum: [ftp, pace_limiar, css]}
+        valor: {type: number, exclusiveMinimum: 0, description: 'ftp em W, pace_limiar em s/km, css em m/s'}
+        vigente_desde: {type: string, format: date}
+    Profile:
+      type: object
+      required: [sexo, fc_repouso, fc_max]
+      properties:
+        sexo: {type: string, enum: [M, F]}
+        fc_repouso: {type: integer, minimum: 30, maximum: 120}
+        fc_max: {type: integer, minimum: 100, maximum: 230, description: Maior que fc_repouso}
