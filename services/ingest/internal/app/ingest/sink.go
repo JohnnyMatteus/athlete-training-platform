@@ -10,21 +10,27 @@ import (
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/domain/activity"
 )
 
+// accepted guarda o resumo (não as amostras) de uma atividade aceita, para o evento final.
+type accepted struct {
+	a       *activity.Activity
+	samples int
+}
+
 // sink aplica deduplicação (idempotência pela chave natural + regra entre fontes),
-// acumula amostras em lotes para COPY e junta os eventos a publicar.
+// acumula amostras em lotes para COPY e monta os eventos a publicar.
 type sink struct {
-	imp      port.Import
+	msg      port.ImportReceived
 	tx       port.Tx
 	now      func() time.Time
-	accepted map[activity.ID]struct{}
+	accepted map[activity.ID]*accepted
+	order    []activity.ID
 	buf      []port.SampleRow
 	batch    int
 	totals   port.Totals
-	events   []port.Event
 }
 
-func newSink(imp port.Import, tx port.Tx, batch int, now func() time.Time) *sink {
-	return &sink{imp: imp, tx: tx, now: now, batch: batch, accepted: map[activity.ID]struct{}{}, buf: make([]port.SampleRow, 0, batch)}
+func newSink(msg port.ImportReceived, tx port.Tx, batch int, now func() time.Time) *sink {
+	return &sink{msg: msg, tx: tx, now: now, batch: batch, accepted: map[activity.ID]*accepted{}, buf: make([]port.SampleRow, 0, batch)}
 }
 
 func (s *sink) Activity(ctx context.Context, a *activity.Activity) (bool, error) {
@@ -37,28 +43,27 @@ func (s *sink) Activity(ctx context.Context, a *activity.Activity) (bool, error)
 
 	switch d.Outcome {
 	case activity.BecomeAlternative:
-		added, err := s.tx.AddAlternative(ctx, d.Winner, altOf(cand))
-		if err != nil {
+		if _, err := s.tx.AddAlternative(ctx, d.Winner, altOf(cand)); err != nil {
 			return false, err
 		}
-		if added {
-			s.totals.Alternative++
-		} else {
-			s.totals.Duplicated++
-		}
+		s.totals.Duplicated++
 		return false, nil
 
 	case activity.ReplacePrimaries:
 		if _, err := s.tx.InsertActivity(ctx, a); err != nil {
 			return false, err
 		}
+		// amostras já em buffer podem pertencer a uma substituída do mesmo lote: gravar antes de apagar
+		if err := s.flush(ctx); err != nil {
+			return false, err
+		}
 		if err := s.tx.Supersede(ctx, a.ID, replaced(primaries, d.Replaced)); err != nil {
 			return false, err
 		}
-		s.totals.Superseded++
-		for _, old := range d.Replaced {
-			s.events = append(s.events, s.event(port.EventActivityCorrect, port.ActivityCorrected{ActivityID: old, SupersededBy: a.ID}))
+		for _, id := range d.Replaced {
+			delete(s.accepted, id)
 		}
+		s.totals.Superseded++
 
 	default:
 		inserted, err := s.tx.InsertActivity(ctx, a)
@@ -72,18 +77,17 @@ func (s *sink) Activity(ctx context.Context, a *activity.Activity) (bool, error)
 	}
 
 	s.totals.Imported++
-	s.accepted[a.ID] = struct{}{}
-	s.events = append(s.events, s.event(port.EventActivityImport, port.ActivityImported{
-		ImportID: s.imp.ID, ActivityID: a.ID, AthleteID: a.AthleteID,
-		Type: a.Type.String(), Source: string(a.Source), StartUTC: a.Start,
-	}))
+	s.accepted[a.ID] = &accepted{a: a}
+	s.order = append(s.order, a.ID)
 	return true, nil
 }
 
 func (s *sink) Samples(ctx context.Context, id activity.ID, batch []activity.Sample) error {
-	if _, ok := s.accepted[id]; !ok {
+	acc, ok := s.accepted[id]
+	if !ok {
 		return nil
 	}
+	acc.samples += len(batch)
 	for _, smp := range batch {
 		s.buf = append(s.buf, port.SampleRow{ActivityID: id, Sample: smp})
 		if len(s.buf) >= s.batch {
@@ -104,8 +108,32 @@ func (s *sink) flush(ctx context.Context) error {
 	return err
 }
 
-func (s *sink) event(typ string, payload any) port.Event {
-	return port.Event{ID: uuid.New(), Type: typ, OccurredAt: s.now().UTC(), Payload: payload}
+// finish monta TreinoImportado (um por atividade nova) e ImportacaoConcluida.
+func (s *sink) finish(formatVersion string) []port.Event {
+	events := make([]port.Event, 0, len(s.order)+1)
+	for _, id := range s.order {
+		acc, ok := s.accepted[id]
+		if !ok { // substituída dentro do mesmo lote
+			continue
+		}
+		a := acc.a
+		events = append(events, s.event(port.EventActivityImported, port.RouteActivityImported, port.ActivityImported{
+			AthleteID: a.AthleteID, ActivityID: a.ID, Type: a.Type.String(), Source: string(a.Source),
+			StartUTC: a.Start, DurationS: a.DurationS, DistanceM: a.DistanceM, Samples: acc.samples,
+		}))
+	}
+	var fv *string
+	if formatVersion != "" {
+		fv = &formatVersion
+	}
+	return append(events, s.event(port.EventImportDone, port.RouteImportDone, port.ImportDone{
+		AthleteID: s.msg.AthleteID, Imported: s.totals.Imported, Duplicated: s.totals.Duplicated,
+		Errors: s.totals.Errors, FormatVersion: fv,
+	}))
+}
+
+func (s *sink) event(typ, route string, payload any) port.Event {
+	return port.Event{ID: uuid.New(), Type: typ, RoutingKey: route, ImportID: s.msg.ImportID, OccurredAt: s.now().UTC(), Payload: payload}
 }
 
 func altOf(c activity.Candidate) port.Alternative {

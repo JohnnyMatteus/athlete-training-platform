@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/app/port"
-	"github.com/JohnnyMatteus/athlete-training-platform/services/ingest/internal/domain/activity"
 )
 
 const (
@@ -27,17 +26,15 @@ type Config struct {
 
 // IngestImport processa uma ImportacaoRecebida.
 type IngestImport struct {
-	imports     port.ImportStore
 	objects     port.ObjectStore
 	uow         port.UnitOfWork
-	translators map[activity.Source]port.Translator
+	translators map[string]port.Translator // por tipo_arquivo: zip, fit, tcx, gpx
 	cfg         Config
 	log         *slog.Logger
 	now         func() time.Time
 }
 
-func New(imports port.ImportStore, objects port.ObjectStore, uow port.UnitOfWork,
-	translators map[activity.Source]port.Translator, cfg Config, log *slog.Logger) *IngestImport {
+func New(objects port.ObjectStore, uow port.UnitOfWork, translators map[string]port.Translator, cfg Config, log *slog.Logger) *IngestImport {
 	if cfg.MaxAttempts <= 0 {
 		cfg.MaxAttempts = DefaultMaxAttempts
 	}
@@ -47,51 +44,71 @@ func New(imports port.ImportStore, objects port.ObjectStore, uow port.UnitOfWork
 	if log == nil {
 		log = slog.Default()
 	}
-	return &IngestImport{imports: imports, objects: objects, uow: uow, translators: translators, cfg: cfg, log: log, now: time.Now}
+	return &IngestImport{objects: objects, uow: uow, translators: translators, cfg: cfg, log: log, now: time.Now}
 }
 
-// Handle processa a mensagem. Erro devolvido = a mensagem deve ser reentregue (nack);
-// nil = pode confirmar (ack), inclusive quando o lote já terminou ou falhou em definitivo.
+// Handle processa a mensagem. Erro devolvido = reentregar (nack com requeue);
+// nil = confirmar (ack), inclusive quando a mensagem já foi processada ou o lote falhou em definitivo.
 func (u *IngestImport) Handle(ctx context.Context, msg port.ImportReceived) error {
-	imp, started, err := u.imports.Begin(ctx, msg.ImportID)
-	if err != nil {
-		return fmt.Errorf("reservar lote: %w", err)
-	}
-	if !started {
-		u.log.InfoContext(ctx, "lote já processado, mensagem ignorada", "import_id", msg.ImportID)
-		return nil
-	}
-
-	err = u.process(ctx, imp)
+	err := u.process(ctx, msg)
 	if err == nil {
 		return nil
 	}
-	permanent := errors.Is(err, port.ErrMalformed)
-	if !permanent && imp.Attempts < u.cfg.MaxAttempts {
-		u.log.WarnContext(ctx, "falha na ingestão, será reentregue", "import_id", imp.ID, "tentativa", imp.Attempts, "erro", err)
+	permanent := errors.Is(err, port.ErrMalformed) || errors.Is(err, port.ErrUnsupported)
+	if !permanent && msg.Attempt < u.cfg.MaxAttempts {
+		u.log.WarnContext(ctx, "falha na ingestão, será reentregue", "import_id", msg.ImportID, "tentativa", msg.Attempt, "erro", err)
 		return err
 	}
-	if ferr := u.imports.Fail(ctx, imp.ID, err.Error(), imp.Attempts); ferr != nil {
-		return errors.Join(err, fmt.Errorf("marcar lote como falho: %w", ferr))
+	if ferr := u.fail(ctx, msg, err); ferr != nil {
+		return errors.Join(err, fmt.Errorf("registrar falha: %w", ferr))
 	}
-	u.log.ErrorContext(ctx, "lote falhou", "import_id", imp.ID, "tentativas", imp.Attempts, "erro", err)
+	u.log.ErrorContext(ctx, "lote falhou", "import_id", msg.ImportID, "tentativas", msg.Attempt, "erro", err)
 	return nil
 }
 
-func (u *IngestImport) process(ctx context.Context, imp port.Import) error {
-	tr, ok := u.translators[imp.Format]
-	if !ok {
-		return fmt.Errorf("%w: formato %q sem tradutor", port.ErrMalformed, imp.Format)
+func (u *IngestImport) fail(ctx context.Context, msg port.ImportReceived, cause error) error {
+	code := port.CodeInternal
+	switch {
+	case errors.Is(cause, port.ErrMalformed):
+		code = port.CodeInvalidFile
+	case errors.Is(cause, port.ErrUnsupported):
+		code = port.CodeUnsupportedFormat
 	}
-	obj, err := u.objects.Open(ctx, imp.ObjectKey)
+	return u.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
+		if first, err := tx.MarkProcessed(ctx, msg.EventID); err != nil || !first {
+			return err
+		}
+		return tx.Enqueue(ctx, port.Event{
+			ID: uuid.New(), Type: port.EventImportFailed, RoutingKey: port.RouteImportFailed, ImportID: msg.ImportID,
+			OccurredAt: u.now().UTC(),
+			// o motivo é o texto do erro de domínio; não carrega dado de saúde
+			Payload: port.ImportFailed{AthleteID: msg.AthleteID, Code: code, Reason: cause.Error(), Attempts: msg.Attempt},
+		})
+	})
+}
+
+func (u *IngestImport) process(ctx context.Context, msg port.ImportReceived) error {
+	tr, ok := u.translators[msg.FileType]
+	if !ok {
+		return fmt.Errorf("%w: %q", port.ErrUnsupported, msg.FileType)
+	}
+	obj, err := u.objects.Open(ctx, msg.Bucket, msg.ObjectKey)
 	if err != nil {
 		return fmt.Errorf("abrir arquivo: %w", err)
 	}
 	defer obj.Close()
 
 	return u.uow.Do(ctx, func(ctx context.Context, tx port.Tx) error {
-		s := newSink(imp, tx, u.cfg.BatchSize, u.now)
-		report, err := tr.Translate(ctx, imp.AthleteID, obj, s)
+		first, err := tx.MarkProcessed(ctx, msg.EventID)
+		if err != nil {
+			return err
+		}
+		if !first {
+			u.log.InfoContext(ctx, "mensagem já processada, ignorada", "event_id", msg.EventID)
+			return nil
+		}
+		s := newSink(msg, tx, u.cfg.BatchSize, u.now)
+		report, err := tr.Translate(ctx, msg.AthleteID, obj, s)
 		if err != nil {
 			return err
 		}
@@ -99,13 +116,6 @@ func (u *IngestImport) process(ctx context.Context, imp port.Import) error {
 			return err
 		}
 		s.totals.Errors += report.Skipped
-		s.events = append(s.events, port.Event{
-			ID: uuid.New(), Type: port.EventImportDone, OccurredAt: u.now().UTC(),
-			Payload: port.ImportDone{ImportID: imp.ID, Totals: s.totals},
-		})
-		if err := tx.CompleteImport(ctx, imp.ID, s.totals); err != nil {
-			return err
-		}
-		return tx.Enqueue(ctx, s.events...)
+		return tx.Enqueue(ctx, s.finish(report.FormatVersion)...)
 	})
 }

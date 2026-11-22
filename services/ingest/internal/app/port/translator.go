@@ -12,6 +12,9 @@ import (
 // ErrMalformed marca arquivo ilegível ou truncado: repetir o processamento não ajuda.
 var ErrMalformed = errors.New("arquivo malformado")
 
+// ErrUnsupported marca um tipo de arquivo sem tradutor.
+var ErrUnsupported = errors.New("formato não suportado")
+
 // Source é o arquivo a traduzir, com acesso aleatório (necessário para ler o zip sem carregá-lo).
 type Source interface {
 	io.ReaderAt

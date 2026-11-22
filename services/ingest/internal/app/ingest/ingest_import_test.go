@@ -36,46 +36,49 @@ func three() *scriptTranslator {
 	}}
 }
 
-func setup(tr port.Translator, format activity.Source, cfg ingest.Config) (*memDB, *ingest.IngestImport, port.Import) {
+func setup(tr port.Translator, fileType string, cfg ingest.Config) (*memDB, *ingest.IngestImport) {
 	db := newMemDB()
-	uc := ingest.New(db, fakeObjects{}, db, map[activity.Source]port.Translator{format: tr}, cfg, nil)
-	return db, uc, db.addImport(format)
+	return db, ingest.New(fakeObjects{}, db, map[string]port.Translator{fileType: tr}, cfg, nil)
 }
 
-func recv(imp port.Import) port.ImportReceived {
-	return port.ImportReceived{EventID: uuid.New(), ImportID: imp.ID}
+func recv(fileType string) port.ImportReceived {
+	return port.ImportReceived{EventID: uuid.New(), ImportID: uuid.New(), AthleteID: uuid.New(), FileType: fileType,
+		Bucket: "uploads", ObjectKey: "abc", Attempt: 1}
+}
+
+func done(db *memDB, i int) port.ImportDone {
+	return db.eventsOf(port.EventImportDone)[i].Payload.(port.ImportDone)
 }
 
 func TestNewImport(t *testing.T) {
-	db, uc, imp := setup(three(), activity.SourceAppleExport, ingest.Config{})
-	require.NoError(t, uc.Handle(context.Background(), recv(imp)))
+	db, uc := setup(three(), "zip", ingest.Config{})
+	require.NoError(t, uc.Handle(context.Background(), recv("zip")))
 
 	assert.Len(t, db.acts, 3)
 	assert.Equal(t, 350, sum(db.samples))
-	assert.Len(t, db.eventsOf(port.EventActivityImport), 3)
-	done := db.eventsOf(port.EventImportDone)
-	require.Len(t, done, 1)
-	assert.Equal(t, 3, done[0].Payload.(port.ImportDone).Imported)
-	assert.Equal(t, 0, done[0].Payload.(port.ImportDone).Duplicated)
+	imported := db.eventsOf(port.EventActivityImported)
+	assert.Len(t, imported, 3)
+	assert.Equal(t, 100, imported[0].Payload.(port.ActivityImported).Samples)
+	require.Len(t, db.eventsOf(port.EventImportDone), 1)
+	assert.Equal(t, 3, done(db, 0).Imported)
+	assert.Equal(t, 0, done(db, 0).Duplicated)
 }
 
 func TestReimportIsIdempotent(t *testing.T) {
-	db, uc, imp := setup(three(), activity.SourceAppleExport, ingest.Config{})
-	require.NoError(t, uc.Handle(context.Background(), recv(imp)))
-
-	second := db.addImport(activity.SourceAppleExport)
-	require.NoError(t, uc.Handle(context.Background(), recv(second)))
+	db, uc := setup(three(), "zip", ingest.Config{})
+	require.NoError(t, uc.Handle(context.Background(), recv("zip")))
+	require.NoError(t, uc.Handle(context.Background(), recv("zip"))) // outro lote, mesmo arquivo
 
 	assert.Len(t, db.acts, 3)
 	assert.Equal(t, 350, sum(db.samples))
-	assert.Len(t, db.eventsOf(port.EventActivityImport), 3, "sem novos TreinoImportado")
-	assert.Equal(t, 3, db.totals[second.ID].Duplicated)
-	assert.Equal(t, 0, db.totals[second.ID].Imported)
+	assert.Len(t, db.eventsOf(port.EventActivityImported), 3, "sem novos TreinoImportado")
+	assert.Equal(t, 3, done(db, 1).Duplicated)
+	assert.Equal(t, 0, done(db, 1).Imported)
 }
 
 func TestSameMessageDeliveredTwice(t *testing.T) {
-	db, uc, imp := setup(three(), activity.SourceAppleExport, ingest.Config{})
-	msg := recv(imp)
+	db, uc := setup(three(), "zip", ingest.Config{})
+	msg := recv("zip")
 	require.NoError(t, uc.Handle(context.Background(), msg))
 	require.NoError(t, uc.Handle(context.Background(), msg))
 	assert.Len(t, db.eventsOf(port.EventImportDone), 1)
@@ -83,35 +86,43 @@ func TestSameMessageDeliveredTwice(t *testing.T) {
 }
 
 func TestFailureRetriesThenFails(t *testing.T) {
-	db, uc, imp := setup(three(), activity.SourceAppleExport, ingest.Config{MaxAttempts: 2})
+	db, uc := setup(three(), "zip", ingest.Config{MaxAttempts: 2})
 	db.failNext = errors.New("banco indisponível")
-	msg := recv(imp)
+	msg := recv("zip")
 
 	require.Error(t, uc.Handle(context.Background(), msg), "1ª tentativa: nack")
 	assert.Empty(t, db.acts, "rollback")
 	assert.Empty(t, db.eventsOf(port.EventImportFailed))
 
-	require.NoError(t, uc.Handle(context.Background(), msg), "2ª tentativa esgota o limite: ack")
-	assert.Equal(t, "falhou", db.status[imp.ID])
+	msg.Attempt = 2
+	require.NoError(t, uc.Handle(context.Background(), msg), "limite esgotado: ack")
 	failed := db.eventsOf(port.EventImportFailed)
 	require.Len(t, failed, 1)
-	assert.Equal(t, 2, failed[0].Payload.(port.ImportFailed).Attempts)
+	f := failed[0].Payload.(port.ImportFailed)
+	assert.Equal(t, 2, f.Attempts)
+	assert.Equal(t, port.CodeInternal, f.Code)
 	assert.Empty(t, db.eventsOf(port.EventImportDone))
 }
 
 func TestMalformedFileFailsWithoutRetry(t *testing.T) {
 	tr := three()
 	tr.err = port.ErrMalformed
-	db, uc, imp := setup(tr, activity.SourceAppleExport, ingest.Config{MaxAttempts: 5})
-	require.NoError(t, uc.Handle(context.Background(), recv(imp)))
-	assert.Equal(t, "falhou", db.status[imp.ID])
+	db, uc := setup(tr, "zip", ingest.Config{MaxAttempts: 5})
+	require.NoError(t, uc.Handle(context.Background(), recv("zip")))
 	assert.Empty(t, db.acts)
+	assert.Equal(t, port.CodeInvalidFile, db.eventsOf(port.EventImportFailed)[0].Payload.(port.ImportFailed).Code)
+}
+
+func TestUnsupportedType(t *testing.T) {
+	db, uc := setup(three(), "zip", ingest.Config{})
+	require.NoError(t, uc.Handle(context.Background(), recv("xyz")))
+	assert.Equal(t, port.CodeUnsupportedFormat, db.eventsOf(port.EventImportFailed)[0].Payload.(port.ImportFailed).Code)
 }
 
 func TestSamplesWrittenInBatches(t *testing.T) {
 	tr := &scriptTranslator{items: []scripted{{act(activity.SourceFit, activity.TypeRunning, 0, 10000, activity.ChanHeartRate), 10000}}}
-	db, uc, imp := setup(tr, activity.SourceFit, ingest.Config{BatchSize: 1000})
-	require.NoError(t, uc.Handle(context.Background(), recv(imp)))
+	db, uc := setup(tr, "fit", ingest.Config{BatchSize: 1000})
+	require.NoError(t, uc.Handle(context.Background(), recv("fit")))
 
 	assert.Equal(t, 10000, sum(db.samples))
 	assert.Len(t, db.copies, 10)
@@ -124,25 +135,16 @@ func TestCrossSourceDedupAnyOrder(t *testing.T) {
 	watch := &scriptTranslator{items: []scripted{{act(activity.SourceAppleExport, activity.Cycling(activity.SettingOutdoor), 0, 3600, activity.ChanHeartRate), 30}}}
 	bike := &scriptTranslator{items: []scripted{{act(activity.SourceFit, activity.Cycling(activity.SettingOutdoor), 2*time.Minute, 3500, activity.ChanHeartRate|activity.ChanPower), 40}}}
 
-	type step struct {
-		format activity.Source
-		tr     *scriptTranslator
-	}
-	apple, fit := step{activity.SourceAppleExport, watch}, step{activity.SourceFit, bike}
-	for name, order := range map[string][]step{"apple_primeiro": {apple, fit}, "fit_primeiro": {fit, apple}} {
+	for name, order := range map[string][]string{"apple_primeiro": {"zip", "fit"}, "fit_primeiro": {"fit", "zip"}} {
 		t.Run(name, func(t *testing.T) {
 			db := newMemDB()
-			translators := map[activity.Source]port.Translator{}
-			var imports []port.Import
-			for _, st := range order {
-				translators[st.format] = st.tr
-				imports = append(imports, db.addImport(st.format))
+			uc := ingest.New(fakeObjects{}, db, map[string]port.Translator{"zip": watch, "fit": bike}, ingest.Config{}, nil)
+			athlete := uuid.New()
+			for _, ft := range order {
+				m := recv(ft)
+				m.AthleteID = athlete
+				require.NoError(t, uc.Handle(context.Background(), m))
 			}
-			uc := ingest.New(db, fakeObjects{}, db, translators, ingest.Config{}, nil)
-			for _, imp := range imports {
-				require.NoError(t, uc.Handle(context.Background(), recv(imp)))
-			}
-
 			require.Len(t, db.acts, 1)
 			for _, r := range db.acts {
 				assert.Equal(t, activity.SourceFit, r.cand.Source)

@@ -6,54 +6,72 @@ import (
 	"github.com/google/uuid"
 )
 
-// Event é um evento de integração a publicar (outbox → RabbitMQ).
-// Os nomes e campos seguem contracts/events/importacao (versão 1).
+// Event é um evento de integração a publicar (outbox → RabbitMQ), versão 1 dos contratos em
+// contracts/events/importacao. Payload é o objeto "dados"; o envelope é montado na outbox.
 type Event struct {
 	ID         uuid.UUID
 	Type       string
+	RoutingKey string
+	ImportID   uuid.UUID
 	OccurredAt time.Time
 	Payload    any
 }
 
 const (
-	EventImportReceived  = "ImportacaoRecebida"
-	EventActivityImport  = "TreinoImportado"
-	EventImportDone      = "ImportacaoConcluida"
-	EventImportFailed    = "ImportacaoFalhou"
-	EventActivityCorrect = "AtividadeCorrigida"
+	EventActivityImported = "TreinoImportado"
+	EventImportDone       = "ImportacaoConcluida"
+	EventImportFailed     = "ImportacaoFalhou"
+
+	RouteActivityImported = "treino.importado"
+	RouteImportDone       = "importacao.concluida"
+	RouteImportFailed     = "importacao.falhou"
 )
 
-// ImportReceived é a mensagem consumida.
+// Códigos de falha do contrato ImportacaoFalhou.
+const (
+	CodeInvalidFile       = "arquivo_invalido"
+	CodeUnsupportedFormat = "formato_nao_suportado"
+	CodeInternal          = "falha_interna"
+)
+
+// ImportReceived é a mensagem ImportacaoRecebida já decodificada.
 type ImportReceived struct {
-	EventID  uuid.UUID `json:"event_id"`
-	ImportID uuid.UUID `json:"import_id"`
+	EventID   uuid.UUID
+	ImportID  uuid.UUID
+	AthleteID uuid.UUID
+	FileType  string // zip, fit, tcx ou gpx
+	Bucket    string
+	ObjectKey string
+	SizeBytes int64
+	SHA256    string
+	Attempt   int // entrega atual, começando em 1
 }
 
-// ActivityImported: uma por atividade nova.
+// ActivityImported é o "dados" de TreinoImportado.
 type ActivityImported struct {
-	ImportID   uuid.UUID `json:"import_id"`
-	ActivityID uuid.UUID `json:"atividade_id"`
 	AthleteID  uuid.UUID `json:"atleta_id"`
+	ActivityID uuid.UUID `json:"atividade_id"`
 	Type       string    `json:"tipo"`
 	Source     string    `json:"fonte"`
 	StartUTC   time.Time `json:"inicio_utc"`
+	DurationS  int       `json:"duracao_s"`
+	DistanceM  *float64  `json:"distancia_m"`
+	Samples    int       `json:"quantidade_amostras"`
 }
 
-// ImportDone: totais do lote.
+// ImportDone é o "dados" de ImportacaoConcluida.
 type ImportDone struct {
-	ImportID uuid.UUID `json:"import_id"`
-	Totals
+	AthleteID     uuid.UUID `json:"atleta_id"`
+	Imported      int       `json:"importadas"`
+	Duplicated    int       `json:"duplicadas"`
+	Errors        int       `json:"erros"`
+	FormatVersion *string   `json:"versao_formato"`
 }
 
-// ImportFailed: lote falho depois do limite de tentativas ou por arquivo malformado.
+// ImportFailed é o "dados" de ImportacaoFalhou.
 type ImportFailed struct {
-	ImportID uuid.UUID `json:"import_id"`
-	Reason   string    `json:"motivo"`
-	Attempts int       `json:"tentativas"`
-}
-
-// ActivityCorrected: a atividade principal foi trocada por outra fonte melhor.
-type ActivityCorrected struct {
-	ActivityID   uuid.UUID `json:"atividade_id"`
-	SupersededBy uuid.UUID `json:"substituida_por"`
+	AthleteID uuid.UUID `json:"atleta_id"`
+	Code      string    `json:"codigo"`
+	Reason    string    `json:"motivo"`
+	Attempts  int       `json:"tentativas"`
 }

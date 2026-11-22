@@ -16,11 +16,12 @@ func main() {
 		root = os.Args[1]
 	}
 	files := map[string][]byte{
-		"fit/bike-potencia.fit":    fixtures.FitBikePower(),
-		"fit/natacao-piscina.fit":  fixtures.FitSwimPool(),
-		"fit/outro-fabricante.fit": fixtures.FitOtherVendor(),
-		"gpx/corrida.gpx":          []byte(fixtures.GPXRun("running", fixtures.TimeUTC)),
-		"tcx/bike.tcx":             []byte(fixtures.TCXBike(fixtures.TimeUTC)),
+		"fit/bike-potencia.fit":     fixtures.FitBikePower(),
+		"fit/natacao-piscina.fit":   fixtures.FitSwimPool(),
+		"fit/outro-fabricante.fit":  fixtures.FitOtherVendor(),
+		"apple/export-reduzido.zip": fixtures.AppleReduced(),
+		"gpx/corrida.gpx":           []byte(fixtures.GPXRun("running", fixtures.TimeUTC)),
+		"tcx/bike.tcx":              []byte(fixtures.TCXBike(fixtures.TimeUTC)),
 	}
 	for name, data := range files {
 		path := filepath.Join(root, name)

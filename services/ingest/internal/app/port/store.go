@@ -2,7 +2,6 @@ package port
 
 import (
 	"context"
-	"errors"
 	"io"
 	"time"
 
@@ -13,18 +12,6 @@ import (
 
 type AthleteID = uuid.UUID
 
-// ErrImportNotFound indica lote inexistente.
-var ErrImportNotFound = errors.New("importação não encontrada")
-
-// Import é o lote de importação (lido do contexto Importação).
-type Import struct {
-	ID        uuid.UUID
-	AthleteID AthleteID
-	Format    activity.Source // apple_export, fit, tcx ou gpx
-	ObjectKey string
-	Attempts  int
-}
-
 // Object é o arquivo no armazenamento de objetos.
 type Object interface {
 	Source
@@ -33,16 +20,7 @@ type Object interface {
 
 // ObjectStore lê arquivos de importação (MinIO/S3).
 type ObjectStore interface {
-	Open(ctx context.Context, key string) (Object, error)
-}
-
-// ImportStore controla o ciclo de vida do lote, fora da transação de ingestão.
-type ImportStore interface {
-	// Begin reserva o lote para processamento e incrementa as tentativas.
-	// Devolve started=false se o lote já terminou (concluído ou falho): a mensagem é repetida.
-	Begin(ctx context.Context, importID uuid.UUID) (imp Import, started bool, err error)
-	// Fail marca o lote como falho e enfileira ImportacaoFalhou, atomicamente.
-	Fail(ctx context.Context, importID uuid.UUID, reason string, attempts int) error
+	Open(ctx context.Context, bucket, key string) (Object, error)
 }
 
 // Alternative é uma FonteAlternativa: o mesmo treino registrado por outra fonte.
@@ -73,8 +51,8 @@ type Tx interface {
 	Supersede(ctx context.Context, newID activity.ID, old []activity.Candidate) error
 	// CopySamples grava amostras em lote (COPY), nunca linha a linha.
 	CopySamples(ctx context.Context, rows []SampleRow) error
-	// CompleteImport marca o lote como concluído com os totais.
-	CompleteImport(ctx context.Context, importID uuid.UUID, t Totals) error
+	// MarkProcessed grava o event_id na inbox; first=false se a mensagem já foi processada.
+	MarkProcessed(ctx context.Context, eventID uuid.UUID) (first bool, err error)
 	// Enqueue grava eventos na outbox, na mesma transação.
 	Enqueue(ctx context.Context, events ...Event) error
 }
@@ -84,11 +62,10 @@ type UnitOfWork interface {
 	Do(ctx context.Context, fn func(ctx context.Context, tx Tx) error) error
 }
 
-// Totals são os totais do lote.
+// Totals são os totais do lote. Alternativas (mesmo treino de outra fonte) contam como duplicadas.
 type Totals struct {
-	Imported    int `json:"importadas"`
-	Duplicated  int `json:"duplicadas"`
-	Errors      int `json:"erros"`
-	Superseded  int `json:"substituidas"`
-	Alternative int `json:"alternativas"`
+	Imported   int
+	Duplicated int
+	Errors     int
+	Superseded int
 }

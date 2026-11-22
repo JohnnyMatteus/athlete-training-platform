@@ -20,51 +20,18 @@ type row struct {
 // memDB implementa ImportStore, UnitOfWork e Tx em memória, com rollback real.
 type memDB struct {
 	mu       sync.Mutex
-	imports  map[uuid.UUID]*port.Import
-	status   map[uuid.UUID]string
+	inbox    map[uuid.UUID]bool
 	acts     map[activity.ID]*row
 	keys     map[string]activity.ID
 	samples  map[activity.ID]int
 	outbox   []port.Event
 	copies   []int // tamanho de cada chamada a CopySamples
-	totals   map[uuid.UUID]port.Totals
 	failNext error
 }
 
 func newMemDB() *memDB {
-	return &memDB{imports: map[uuid.UUID]*port.Import{}, status: map[uuid.UUID]string{}, acts: map[activity.ID]*row{},
-		keys: map[string]activity.ID{}, samples: map[activity.ID]int{}, totals: map[uuid.UUID]port.Totals{}}
-}
-
-func (m *memDB) addImport(format activity.Source) port.Import {
-	imp := &port.Import{ID: uuid.New(), AthleteID: uuid.New(), Format: format, ObjectKey: "k"}
-	m.imports[imp.ID] = imp
-	m.status[imp.ID] = "recebida"
-	return *imp
-}
-
-func (m *memDB) Begin(_ context.Context, id uuid.UUID) (port.Import, bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	imp, ok := m.imports[id]
-	if !ok {
-		return port.Import{}, false, port.ErrImportNotFound
-	}
-	if s := m.status[id]; s == "concluida" || s == "falhou" {
-		return *imp, false, nil
-	}
-	m.status[id] = "processando"
-	imp.Attempts++
-	return *imp, true, nil
-}
-
-func (m *memDB) Fail(_ context.Context, id uuid.UUID, reason string, attempts int) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.status[id] = "falhou"
-	m.outbox = append(m.outbox, port.Event{ID: uuid.New(), Type: port.EventImportFailed,
-		Payload: port.ImportFailed{ImportID: id, Reason: reason, Attempts: attempts}})
-	return nil
+	return &memDB{inbox: map[uuid.UUID]bool{}, acts: map[activity.ID]*row{},
+		keys: map[string]activity.ID{}, samples: map[activity.ID]int{}}
 }
 
 func (m *memDB) Do(ctx context.Context, fn func(context.Context, port.Tx) error) error {
@@ -85,11 +52,11 @@ type snapshot struct {
 	keys    map[string]activity.ID
 	samples map[activity.ID]int
 	outbox  []port.Event
-	status  map[uuid.UUID]string
+	inbox   map[uuid.UUID]bool
 }
 
 func (m *memDB) snapshot() snapshot {
-	s := snapshot{acts: map[activity.ID]*row{}, keys: map[string]activity.ID{}, samples: map[activity.ID]int{}, status: map[uuid.UUID]string{}}
+	s := snapshot{acts: map[activity.ID]*row{}, keys: map[string]activity.ID{}, samples: map[activity.ID]int{}, inbox: map[uuid.UUID]bool{}}
 	for k, v := range m.acts {
 		alts := map[string]port.Alternative{}
 		for ak, av := range v.alts {
@@ -103,15 +70,15 @@ func (m *memDB) snapshot() snapshot {
 	for k, v := range m.samples {
 		s.samples[k] = v
 	}
-	for k, v := range m.status {
-		s.status[k] = v
+	for k, v := range m.inbox {
+		s.inbox[k] = v
 	}
 	s.outbox = append(s.outbox, m.outbox...)
 	return s
 }
 
 func (m *memDB) restore(s snapshot) {
-	m.acts, m.keys, m.samples, m.outbox, m.status = s.acts, s.keys, s.samples, s.outbox, s.status
+	m.acts, m.keys, m.samples, m.outbox, m.inbox = s.acts, s.keys, s.samples, s.outbox, s.inbox
 }
 
 func (m *memDB) FindPrimaries(_ context.Context, athlete uuid.UUID, from, to time.Time) ([]activity.Candidate, error) {
@@ -169,10 +136,12 @@ func (m *memDB) CopySamples(_ context.Context, rows []port.SampleRow) error {
 	return nil
 }
 
-func (m *memDB) CompleteImport(_ context.Context, id uuid.UUID, t port.Totals) error {
-	m.status[id] = "concluida"
-	m.totals[id] = t
-	return nil
+func (m *memDB) MarkProcessed(_ context.Context, id uuid.UUID) (bool, error) {
+	if m.inbox[id] {
+		return false, nil
+	}
+	m.inbox[id] = true
+	return true, nil
 }
 
 func (m *memDB) Enqueue(_ context.Context, ev ...port.Event) error {
@@ -198,7 +167,9 @@ func (emptyObject) ReadAt([]byte, int64) (int, error) { return 0, errors.New("va
 func (emptyObject) Size() int64                       { return 0 }
 func (emptyObject) Close() error                      { return nil }
 
-func (fakeObjects) Open(context.Context, string) (port.Object, error) { return emptyObject{}, nil }
+func (fakeObjects) Open(context.Context, string, string) (port.Object, error) {
+	return emptyObject{}, nil
+}
 
 // scriptTranslator emite atividades pré-definidas, cada uma com N amostras.
 type scriptTranslator struct {
